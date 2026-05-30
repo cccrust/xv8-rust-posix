@@ -293,17 +293,113 @@ impl File {
             _ => err!(SysError::BadDescriptor),
         }
     }
+
+    pub fn lseek(&self, offset: isize, whence: usize) -> Result<isize, SysError> {
+        let mut file_inner = FILE_TABLE.inner[self.id].lock();
+
+        match &file_inner.r#type {
+            FileType::None => err!(SysError::BadDescriptor),
+            FileType::Pipe { .. } | FileType::Socket { .. } => err!(SysError::IsDirectory),
+            FileType::Inode { .. } | FileType::Device { .. } => {
+                let new_offset = match whence {
+                    0 => { // SEEK_SET
+                        if offset < 0 {
+                            err!(SysError::InvalidArgument);
+                        }
+                        offset as u32
+                    }
+                    1 => { // SEEK_CUR
+                        let base = file_inner.offset as isize;
+                        let new = base + offset;
+                        if new < 0 {
+                            err!(SysError::InvalidArgument);
+                        }
+                        new as u32
+                    }
+                    2 => { // SEEK_END
+                        match &file_inner.r#type {
+                            FileType::Inode { inode } => {
+                                let inode_inner = inode.lock();
+                                let size = inode_inner.size as isize;
+                                let new = size + offset;
+                                if new < 0 {
+                                    err!(SysError::InvalidArgument);
+                                }
+                                drop(inode_inner);
+                                new as u32
+                            }
+                            _ => err!(SysError::InvalidArgument),
+                        }
+                    }
+                    _ => err!(SysError::InvalidArgument),
+                };
+                file_inner.offset = new_offset;
+                Ok(new_offset as isize)
+            }
+        }
+    }
+
+    pub fn truncate(&self, _length: usize) -> Result<(), SysError> {
+        let file_inner = FILE_TABLE.inner[self.id].lock();
+
+        match &file_inner.r#type {
+            FileType::Inode { inode } => {
+                let mut inode = inode.clone();
+                let mut inode_inner = inode.lock();
+                inode.trunc(&mut inode_inner);
+                inode.unlock(inode_inner);
+                Ok(())
+            }
+            _ => err!(SysError::BadDescriptor),
+        }
+    }
+
+    pub fn chmod(&self, mode: u16) -> Result<(), SysError> {
+        let file_inner = FILE_TABLE.inner[self.id].lock();
+
+        match &file_inner.r#type {
+            FileType::Inode { inode } | FileType::Device { inode, .. } => {
+                let mut inode = inode.clone();
+                let mut inode_inner = inode.lock();
+                inode_inner.mode = (inode_inner.mode & !0o777) | (mode & 0o777);
+                inode.update(&inode_inner);
+                inode.unlock(inode_inner);
+                Ok(())
+            }
+            _ => err!(SysError::BadDescriptor),
+        }
+    }
+
+    pub fn chown(&self, uid: u16, gid: u16) -> Result<(), SysError> {
+        let file_inner = FILE_TABLE.inner[self.id].lock();
+
+        match &file_inner.r#type {
+            FileType::Inode { inode } | FileType::Device { inode, .. } => {
+                let mut inode = inode.clone();
+                let mut inode_inner = inode.lock();
+                inode_inner.uid = uid;
+                inode_inner.gid = gid;
+                inode.update(&inode_inner);
+                inode.unlock(inode_inner);
+                Ok(())
+            }
+            _ => err!(SysError::BadDescriptor),
+        }
+    }
 }
 
-/// File open flags
+/// File open flags (POSIX standard)
 pub struct OpenFlag;
 
 impl OpenFlag {
     pub const READ_ONLY: usize = 0x000;
     pub const WRITE_ONLY: usize = 0x001;
     pub const READ_WRITE: usize = 0x002;
-    pub const CREATE: usize = 0x200;
-    pub const TRUNCATE: usize = 0x400;
+    pub const CREATE: usize = 0x040;
+    pub const EXCLUSIVE: usize = 0x080;
+    pub const TRUNCATE: usize = 0x200;
+    pub const APPEND: usize = 0x400;
+    pub const NON_BLOCK: usize = 0x800;
 }
 
 /// Device interface

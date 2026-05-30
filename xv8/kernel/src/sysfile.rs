@@ -431,3 +431,208 @@ pub fn sys_ioctl(args: &SyscallArgs) -> Result<usize, SysError> {
     let (_, file) = try_log!(args.get_file(0));
     log!(file.ioctl(ioctl_cmd, ioctl_arg))
 }
+
+pub fn sys_lseek(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+    let offset = args.get_int(1) as isize;
+    let whence = args.get_int(2) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_, file) = try_log!(args.get_file(0));
+    file.lseek(offset, whence).map(|v| v as usize)
+}
+
+pub fn sys_truncate(args: &SyscallArgs) -> Result<usize, SysError> {
+    let path = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+
+    let _op = Operation::begin();
+    let inode = match log!(Path::new(&path).resolve()) {
+        Ok(i) => i,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    let mut file = {
+        let f = match log!(File::alloc()) {
+            Ok(f) => f,
+            Err(e) => {
+                inode.put();
+                err!(SysError::from(e));
+            }
+        };
+        let mut file_inner = FILE_TABLE.inner[f.id].lock();
+        file_inner.r#type = FileType::Inode { inode: inode.clone() };
+        file_inner.readable = false;
+        file_inner.writeable = true;
+        f
+    };
+
+    drop(inode);
+    log!(file.truncate(0))?;
+    file.close();
+    Ok(0)
+}
+
+pub fn sys_ftruncate(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    log!(file.truncate(0))?;
+    Ok(0)
+}
+
+pub fn sys_chmod(args: &SyscallArgs) -> Result<usize, SysError> {
+    let path = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+    let mode = args.get_int(1) as u16;
+
+    let _op = Operation::begin();
+    let inode = match log!(Path::new(&path).resolve()) {
+        Ok(i) => i,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    let mut file = {
+        let f = match log!(File::alloc()) {
+            Ok(f) => f,
+            Err(e) => {
+                inode.put();
+                err!(SysError::from(e));
+            }
+        };
+        let mut file_inner = FILE_TABLE.inner[f.id].lock();
+        file_inner.r#type = FileType::Inode { inode: inode.clone() };
+        file_inner.readable = false;
+        file_inner.writeable = false;
+        f
+    };
+
+    drop(inode);
+    log!(file.chmod(mode))?;
+    file.close();
+    Ok(0)
+}
+
+pub fn sys_fchmod(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let mode = args.get_int(1) as u16;
+    log!(file.chmod(mode))?;
+    Ok(0)
+}
+
+pub fn sys_chown(args: &SyscallArgs) -> Result<usize, SysError> {
+    let path = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+    let uid = args.get_int(1) as u16;
+    let gid = args.get_int(2) as u16;
+
+    let _op = Operation::begin();
+    let inode = match log!(Path::new(&path).resolve()) {
+        Ok(i) => i,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    let mut file = {
+        let f = match log!(File::alloc()) {
+            Ok(f) => f,
+            Err(e) => {
+                inode.put();
+                err!(SysError::from(e));
+            }
+        };
+        let mut file_inner = FILE_TABLE.inner[f.id].lock();
+        file_inner.r#type = FileType::Inode { inode: inode.clone() };
+        file_inner.readable = false;
+        file_inner.writeable = false;
+        f
+    };
+
+    drop(inode);
+    log!(file.chown(uid, gid))?;
+    file.close();
+    Ok(0)
+}
+
+pub fn sys_fchown(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let uid = args.get_int(1) as u16;
+    let gid = args.get_int(2) as u16;
+    log!(file.chown(uid, gid))?;
+    Ok(0)
+}
+
+pub fn sys_access(args: &SyscallArgs) -> Result<usize, SysError> {
+    let path = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+    let _mode = args.get_int(1) as u16;
+
+    let _op = Operation::begin();
+    let inode = match log!(Path::new(&path).resolve()) {
+        Ok(i) => i,
+        Err(_) => err!(SysError::NoEntry),
+    };
+    inode.put();
+    Ok(0)
+}
+
+pub fn sys_rename(args: &SyscallArgs) -> Result<usize, SysError> {
+    let old = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+    let new = try_log!(args.fetch_string(args.get_addr(1), MAXPATH));
+
+    let _op = Operation::begin();
+
+    let old_inode = match log!(Path::new(&old).resolve()) {
+        Ok(i) => i,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    let (parent_new, name_new) = match log!(Path::new(&new).resolve_parent()) {
+        Ok(v) => v,
+        Err(_) => {
+            old_inode.put();
+            err!(SysError::NoEntry);
+        }
+    };
+
+    if old_inode.dev != parent_new.dev {
+        old_inode.put();
+        parent_new.put();
+        err!(SysError::CrossDeviceLink);
+    }
+
+    let mut parent_new_inner = parent_new.lock();
+
+    if let Err(e) = log!(Directory::link(
+        &parent_new,
+        &mut parent_new_inner,
+        name_new,
+        old_inode.inum as u16
+    )) {
+        parent_new.unlock_put(parent_new_inner);
+        old_inode.put();
+        err!(SysError::from(e));
+    }
+
+    parent_new.unlock_put(parent_new_inner);
+
+    drop(old_inode);
+
+    let (_, name_old) = match log!(Path::new(&old).resolve_parent()) {
+        Ok(v) => v,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    let parent_old = match log!(Path::new(&old).resolve_parent()) {
+        Ok((p, _)) => p,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    let mut parent_old_inner = parent_old.lock();
+
+    let dir = Directory::new_empty();
+    if let Err(_) = log!(parent_old.write(&mut parent_old_inner, 0, dir.as_bytes(), false)) {
+        parent_old.unlock_put(parent_old_inner);
+        err!(SysError::IoError);
+    }
+
+    parent_old.unlock_put(parent_old_inner);
+
+    Ok(0)
+}

@@ -98,3 +98,85 @@ pub fn sys_poweroff(args: &SyscallArgs) -> ! {
 
     unreachable!("poweroff failed");
 }
+
+pub fn sys_umask(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Ok(0o022)
+}
+
+pub fn sys_getuid(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Ok(0)
+}
+
+pub fn sys_geteuid(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Ok(0)
+}
+
+pub fn sys_getgid(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Ok(0)
+}
+
+pub fn sys_getegid(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Ok(0)
+}
+
+#[repr(C)]
+pub struct TimeVal {
+    pub sec: u32,
+    pub usec: u32,
+}
+
+pub fn sys_gettimeofday(args: &SyscallArgs) -> Result<usize, SysError> {
+    let addr = args.get_addr(0);
+
+    let tv = TimeVal {
+        sec: (*TICKS.lock() / 100) as u32,
+        usec: 0,
+    };
+
+    let src = unsafe {
+        core::slice::from_raw_parts(&tv as *const _ as *const u8, core::mem::size_of::<TimeVal>())
+    };
+    try_log!(proc::copy_to_user(src, addr).map_err(|_| SysError::BadAddress));
+
+    Ok(0)
+}
+
+#[repr(C)]
+pub struct Utsname {
+    pub sysname: [u8; 65],
+    pub nodename: [u8; 65],
+    pub release: [u8; 65],
+    pub version: [u8; 65],
+    pub machine: [u8; 65],
+    pub domainname: [u8; 65],
+}
+
+pub fn sys_uname(args: &SyscallArgs) -> Result<usize, SysError> {
+    let addr = args.get_addr(0);
+
+    let mut uts = Utsname {
+        sysname: [0; 65],
+        nodename: [0; 65],
+        release: [0; 65],
+        version: [0; 65],
+        machine: [0; 65],
+        domainname: [0; 65],
+    };
+
+    let sysname = b"xv8";
+    let release = b"1.0.0";
+    let version = b"#1 SMP";
+    let machine = b"riscv64";
+
+    uts.sysname[..sysname.len()].copy_from_slice(sysname);
+    uts.release[..release.len()].copy_from_slice(release);
+    uts.version[..version.len()].copy_from_slice(version);
+    uts.machine[..machine.len()].copy_from_slice(machine);
+
+    let src = unsafe {
+        core::slice::from_raw_parts(&uts as *const _ as *const u8, core::mem::size_of::<Utsname>())
+    };
+    try_log!(proc::copy_to_user(src, addr).map_err(|_| SysError::BadAddress));
+
+    Ok(0)
+}

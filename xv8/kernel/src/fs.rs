@@ -220,12 +220,18 @@ impl DiskInode {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
+#[repr(C)]
 pub struct Stat {
     pub dev: u32,
     pub ino: u32,
     pub r#type: InodeType,
+    pub mode: u16,
     pub nlink: u16,
+    pub uid: u16,
+    pub gid: u16,
     pub size: u64,
+    pub atime: u32,
+    pub mtime: u32,
 }
 
 /// Cached inode data, protected by sleeplock
@@ -236,7 +242,10 @@ pub struct InodeInner {
     pub r#type: InodeType,
     pub major: u16,
     pub minor: u16,
+    pub mode: u16,
     pub nlink: u16,
+    pub uid: u16,
+    pub gid: u16,
     pub size: u32,
     pub addrs: [u32; NDIRECT + 1],
 }
@@ -249,7 +258,10 @@ impl InodeInner {
             r#type: InodeType::Free,
             major: 0,
             minor: 0,
+            mode: 0,
             nlink: 0,
+            uid: 0,
+            gid: 0,
             size: 0,
             addrs: [0; NDIRECT + 1],
         }
@@ -585,10 +597,15 @@ impl Inode {
     pub fn stat(&self, inner: &SleepLockGuard<'_, InodeInner>) -> Stat {
         Stat {
             dev: self.dev,
-            r#type: inner.r#type,
-            nlink: inner.nlink,
-            size: inner.size as u64,
             ino: self.inum,
+            r#type: inner.r#type,
+            mode: inner.mode,
+            nlink: inner.nlink,
+            uid: inner.uid,
+            gid: inner.gid,
+            size: inner.size as u64,
+            atime: 0,
+            mtime: 0,
         }
     }
 
