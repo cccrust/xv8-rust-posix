@@ -282,6 +282,87 @@ pub fn sys_nice(args: &SyscallArgs) -> Result<usize, SysError> {
     Ok(new_nice as usize)
 }
 
+pub fn sys_getppid(_args: &SyscallArgs) -> Result<usize, SysError> {
+    let proc = current_proc();
+    let parents = proc::PROC_TABLE.parents.lock();
+    let parent_id = parents[proc.id].unwrap_or(0);
+    Ok(parent_id)
+}
+
+pub fn sys_setuid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let uid = args.get_int(0) as u32;
+
+    let (_proc, data) = current_proc_and_data_mut();
+    data.uid = uid;
+
+    Ok(0)
+}
+
+pub fn sys_setgid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let gid = args.get_int(0) as u32;
+
+    let (_proc, data) = current_proc_and_data_mut();
+    data.gid = gid;
+
+    Ok(0)
+}
+
+pub fn sys_getpgid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let pid = args.get_int(0) as usize;
+
+    if pid == 0 {
+        return Ok(*current_proc().data().pgrp);
+    }
+
+    let current_id = current_proc().id;
+    let parents = proc::PROC_TABLE.parents.lock();
+
+    for p in proc::PROC_TABLE.iter() {
+        if parents[p.id] == Some(current_id) {
+            if *p.inner.lock().pid == *unsafe { Pid::from_usize(pid) } {
+                return Ok(*p.data().pgrp);
+            }
+        }
+    }
+
+    err!(SysError::NoProcess)
+}
+
+pub fn sys_isatty(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_, file) = try_log!(args.get_file(0));
+
+    let file_inner = crate::file::FILE_TABLE.inner[file.id].lock();
+
+    if let crate::file::FileType::Device { major, .. } = &file_inner.r#type {
+        if *major as usize == crate::file::CONSOLE as usize {
+            return Ok(1);
+        }
+    }
+
+    Ok(0)
+}
+
+pub fn sys_tcgetattr(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _fd = args.get_int(0) as usize;
+    let _addr = args.get_addr(1);
+
+    Ok(0)
+}
+
+pub fn sys_tcsetattr(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _fd = args.get_int(0) as usize;
+    let _addr = args.get_addr(1);
+    let _opt = args.get_int(2) as usize;
+
+    Ok(0)
+}
+
 #[repr(C)]
 pub struct Itimerval {
     pub interval: TimeVal,

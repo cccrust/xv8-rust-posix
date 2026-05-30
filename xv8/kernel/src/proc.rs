@@ -383,6 +383,10 @@ pub struct ProcData {
     pub utime: usize,
     /// System time consumed (in ticks)
     pub stime: usize,
+    /// Real user ID
+    pub uid: u32,
+    /// Real group ID
+    pub gid: u32,
 }
 
 impl ProcData {
@@ -401,6 +405,8 @@ impl ProcData {
             nice: 0,
             utime: 0,
             stime: 0,
+            uid: 0,
+            gid: 0,
         }
     }
 

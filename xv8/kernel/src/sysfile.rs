@@ -40,6 +40,36 @@ pub fn sys_dup(args: &SyscallArgs) -> Result<usize, SysError> {
     Ok(fd)
 }
 
+pub fn sys_dup2(args: &SyscallArgs) -> Result<usize, SysError> {
+    let oldfd = args.get_int(0) as usize;
+    let newfd = args.get_int(1) as usize;
+
+    if oldfd >= crate::param::NOFILE || newfd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_, data) = current_proc_and_data_mut();
+
+    let mut old_file = match data.open_files[oldfd].take() {
+        Some(f) => f,
+        None => return Err(SysError::BadDescriptor),
+    };
+
+    if oldfd == newfd {
+        data.open_files[oldfd] = Some(old_file);
+        return Ok(newfd);
+    }
+
+    if let Some(mut existing) = data.open_files[newfd].take() {
+        existing.close();
+    }
+
+    let mut new_file = old_file.dup();
+    data.open_files[newfd] = Some(new_file);
+    data.open_files[oldfd] = Some(old_file);
+    Ok(newfd)
+}
+
 pub fn sys_read(args: &SyscallArgs) -> Result<usize, SysError> {
     let addr = args.get_addr(1);
     let n = args.get_int(2);

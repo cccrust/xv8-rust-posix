@@ -298,6 +298,14 @@ pub enum Syscall {
     Setpgid = 51,
     Setsid = 52,
     Nice = 53,
+    Dup2 = 54,
+    Getppid = 55,
+    Setuid = 56,
+    Setgid = 57,
+    Getpgid = 58,
+    Isatty = 59,
+    Tcgetattr = 60,
+    Tcsetattr = 61,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -358,6 +366,14 @@ impl TryFrom<usize> for Syscall {
             51 => Ok(Syscall::Setpgid),
             52 => Ok(Syscall::Setsid),
             53 => Ok(Syscall::Nice),
+            54 => Ok(Syscall::Dup2),
+            55 => Ok(Syscall::Getppid),
+            56 => Ok(Syscall::Setuid),
+            57 => Ok(Syscall::Setgid),
+            58 => Ok(Syscall::Getpgid),
+            59 => Ok(Syscall::Isatty),
+            60 => Ok(Syscall::Tcgetattr),
+            61 => Ok(Syscall::Tcsetattr),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -427,6 +443,14 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Setpgid => sys_setpgid(&args),
             Syscall::Setsid => sys_setsid(&args),
             Syscall::Nice => sys_nice(&args),
+            Syscall::Dup2 => sys_dup2(&args),
+            Syscall::Getppid => sys_getppid(&args),
+            Syscall::Setuid => sys_setuid(&args),
+            Syscall::Setgid => sys_setgid(&args),
+            Syscall::Getpgid => sys_getpgid(&args),
+            Syscall::Isatty => sys_isatty(&args),
+            Syscall::Tcgetattr => sys_tcgetattr(&args),
+            Syscall::Tcsetattr => sys_tcsetattr(&args),
         },
         Err(e) => Err(e),
     };

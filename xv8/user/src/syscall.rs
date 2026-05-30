@@ -144,6 +144,10 @@ pub mod raw {
         syscall1(Syscall::Close, fd)
     }
 
+    pub fn lseek(fd: usize, offset: isize, whence: i32) -> isize {
+        syscall3(Syscall::Lseek, fd, offset as usize, whence as usize)
+    }
+
     pub fn mknod(path: *const u8, major: usize, minor: usize) -> isize {
         syscall3(Syscall::Mknod, path as usize, major, minor)
     }
@@ -382,6 +386,10 @@ pub fn open(path: &str, flags: usize) -> Result<Fd, SysError> {
 
 pub fn close(fd: Fd) -> Result<(), SysError> {
     check_unit(raw::close(fd.as_raw()))
+}
+
+pub fn lseek(fd: Fd, offset: i64, whence: i32) -> Result<i64, SysError> {
+    check(raw::lseek(fd.as_raw(), offset as isize, whence)).map(|v| v as i64)
 }
 
 pub fn mknod(path: &str, major: usize, minor: usize) -> Result<(), SysError> {

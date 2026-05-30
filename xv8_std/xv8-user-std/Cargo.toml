@@ -1,0 +1,10 @@
+[package]
+name = "xv8-user-std"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+user = { path = "../../xv8/user", package = "user" }
+
+[features]
+default = []
