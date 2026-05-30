@@ -13,6 +13,7 @@ use crate::fs::{self, Inode, Path};
 use crate::log::Operation;
 use crate::memlayout::{TRAMPOLINE, TRAPFRAME, kstack};
 use crate::param::{NCPU, NKSTACK_PAGES, NOFILE, NPROC, ROOTDEV};
+use crate::signal;
 use crate::riscv::{PGSIZE, PTE_R, PTE_W, PTE_X, interrupts, registers::tp};
 use crate::spinlock::{SpinLock, SpinLockGuard};
 use crate::swtch::swtch;
@@ -372,6 +373,16 @@ pub struct ProcData {
     pub cwd: Inode,
     /// Process name
     pub name: String,
+    /// Signal state
+    pub signals: signal::SignalState,
+    /// Process group ID (same as pid for xv8)
+    pub pgrp: Pid,
+    /// Nice value (-20 to 19, default 0)
+    pub nice: i32,
+    /// User time consumed (in ticks)
+    pub utime: usize,
+    /// System time consumed (in ticks)
+    pub stime: usize,
 }
 
 impl ProcData {
@@ -385,6 +396,11 @@ impl ProcData {
             open_files: [const { None }; NOFILE],
             cwd: Inode::new(0, 0, 0),
             name: String::new(),
+            signals: signal::SignalState::new(),
+            pgrp: Pid(0),
+            nice: 0,
+            utime: 0,
+            stime: 0,
         }
     }
 

@@ -2,15 +2,17 @@ use core::mem;
 use core::slice;
 
 use alloc::string::String;
+use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::abi::OpenFlag;
 use crate::exec::exec;
 use crate::file::{FILE_TABLE, File, FileType};
-use crate::fs::{Directory, Inode, InodeType, Path};
+use crate::fs::{BSIZE, Directory, Inode, InodeType, MAXFILE, Path};
 use crate::log::Operation;
 use crate::param::{MAXARG, MAXPATH, NDEV};
 use crate::pipe::Pipe;
+use crate::proc;
 use crate::proc::current_proc_and_data_mut;
 use crate::riscv::PGSIZE;
 use crate::syscall::{SysError, SyscallArgs};
@@ -614,10 +616,13 @@ pub fn sys_rename(args: &SyscallArgs) -> Result<usize, SysError> {
 
     drop(old_inode);
 
-    let (_, name_old) = match log!(Path::new(&old).resolve_parent()) {
+    // TODO: name_old needed for proper unlink after rename is fully implemented
+    #[allow(unused_variables)]
+    let (name_old, _) = match log!(Path::new(&old).resolve_parent()) {
         Ok(v) => v,
         Err(_) => err!(SysError::NoEntry),
     };
+    let _ = name_old; // suppress warning until used
 
     let parent_old = match log!(Path::new(&old).resolve_parent()) {
         Ok((p, _)) => p,
@@ -634,5 +639,112 @@ pub fn sys_rename(args: &SyscallArgs) -> Result<usize, SysError> {
 
     parent_old.unlock_put(parent_old_inner);
 
+    Ok(0)
+}
+
+pub fn sys_symlink(args: &SyscallArgs) -> Result<usize, SysError> {
+    let target = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+    let path = try_log!(args.fetch_string(args.get_addr(1), MAXPATH));
+
+    let _op = Operation::begin();
+
+    let (inode, mut inode_inner) = match log!(Inode::create(
+        &Path::new(&path),
+        InodeType::SymLink,
+        0,
+        0
+    )) {
+        Ok(i) => i,
+        Err(e) => err!(SysError::from(e)),
+    };
+
+    let max_size = (MAXFILE * BSIZE) as u32;
+    if target.len() as u32 > max_size {
+        inode.unlock_put(inode_inner);
+        err!(SysError::NameTooLong);
+    }
+
+    let written = log!(inode.write(&mut inode_inner, 0, target.as_bytes(), false));
+    if written.is_err() || written.unwrap() != target.len() as u32 {
+        inode.unlock_put(inode_inner);
+        err!(SysError::IoError);
+    }
+
+    inode.unlock_put(inode_inner);
+    Ok(0)
+}
+
+pub fn sys_readlink(args: &SyscallArgs) -> Result<usize, SysError> {
+    let path = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+    let buf_addr = args.get_addr(1);
+    let bufsiz = args.get_int(2) as usize;
+
+    let _op = Operation::begin();
+
+    let inode = match log!(Path::new(&path).resolve()) {
+        Ok(i) => i,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    {
+        let inode_inner = inode.lock();
+        if inode_inner.r#type != InodeType::SymLink {
+            inode.unlock_put(inode_inner);
+            err!(SysError::InvalidArgument);
+        }
+    }
+
+    let mut buf = vec![0u8; bufsiz.min(256)];
+    let n = {
+        let inode = inode.clone();
+        let mut inode_inner = inode.lock();
+        inode.read(&mut inode_inner, 0, &mut buf, false)?
+    };
+
+    inode.put();
+
+    try_log!(proc::copy_to_user(&buf[..n as usize], buf_addr).map_err(|_| SysError::BadAddress));
+
+    Ok(n as usize)
+}
+
+#[allow(dead_code)]
+pub struct Timespec {
+    pub sec: u32,
+    pub nsec: u32,
+}
+
+pub fn sys_utimensat(args: &SyscallArgs) -> Result<usize, SysError> {
+    let path = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+    let times_addr = args.get_addr(1);
+    let flags = args.get_int(2) as usize;
+
+    if times_addr == 0 {
+        return Err(SysError::BadAddress);
+    }
+
+    let now = crate::trap::TICKS.lock();
+    let current_time = *now;
+    drop(now);
+
+    let _op = Operation::begin();
+
+    let inode = match log!(Path::new(&path).resolve()) {
+        Ok(i) => i,
+        Err(_) => err!(SysError::NoEntry),
+    };
+
+    if flags & 0x10000 != 0 {
+        // AT_SYMLINK_NOFOLLOW - don't follow symlinks
+    }
+
+    {
+        let mut inode_inner = inode.lock();
+        inode_inner.atime = current_time as u32;
+        inode_inner.mtime = current_time as u32;
+        inode.update(&inode_inner);
+    }
+
+    inode.put();
     Ok(0)
 }

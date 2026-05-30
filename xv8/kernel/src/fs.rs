@@ -183,6 +183,7 @@ pub enum InodeType {
     Directory = 1,
     File = 2,
     Device = 3,
+    SymLink = 4,
 }
 
 /// On-disk inode structure
@@ -247,6 +248,8 @@ pub struct InodeInner {
     pub uid: u16,
     pub gid: u16,
     pub size: u32,
+    pub atime: u32,
+    pub mtime: u32,
     pub addrs: [u32; NDIRECT + 1],
 }
 
@@ -263,6 +266,8 @@ impl InodeInner {
             uid: 0,
             gid: 0,
             size: 0,
+            atime: 0,
+            mtime: 0,
             addrs: [0; NDIRECT + 1],
         }
     }
@@ -604,8 +609,8 @@ impl Inode {
             uid: inner.uid,
             gid: inner.gid,
             size: inner.size as u64,
-            atime: 0,
-            mtime: 0,
+            atime: inner.atime,
+            mtime: inner.mtime,
         }
     }
 

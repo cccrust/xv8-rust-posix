@@ -87,6 +87,29 @@ cargo build --release
 
 ---
 
+### xv8_std/ - std library for xv8
+Enable `std` support on xv8 so `posix/tools/` compiles without modification.
+
+**Location:** `xv8_std/`
+
+**Structure:**
+```
+xv8_std/
+├── Cargo.toml
+├── xv8-libc/           # syscall wrapper (C-like API)
+└── xv8-std-overlay/    # std trait implementations
+```
+
+**Plan:** `xv8_std/v0.1.md` — Minimal impl for text-processing tools (cat, head, tail, grep, etc.)
+
+**Build:**
+```bash
+cd xv8_std/xv8-libc && cargo build --release
+cd xv8_std/xv8-std-overlay && cargo build --release
+```
+
+---
+
 ## Workspace Root
 
 **Files:**

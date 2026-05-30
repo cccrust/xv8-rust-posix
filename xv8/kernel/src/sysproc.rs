@@ -1,8 +1,9 @@
 use alloc::vec;
 
 use crate::memlayout::QEMU_POWER;
-use crate::proc::{self, Channel, Pid, current_proc};
+use crate::proc::{self, Channel, Pid, current_proc, current_proc_and_data_mut};
 use crate::rng::rand_bytes;
+use crate::signal;
 use crate::syscall::{SysError, SyscallArgs};
 use crate::trap::TICKS;
 
@@ -61,7 +62,6 @@ pub fn sys_sleep(args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_kill(args: &SyscallArgs) -> Result<usize, SysError> {
     let pid = args.get_int(0);
 
-    // Safety: kernel will return an error if the process does not exist.
     if proc::kill(unsafe { Pid::from_usize(pid as usize) }) {
         Ok(0)
     } else {
@@ -128,9 +128,10 @@ pub struct TimeVal {
 pub fn sys_gettimeofday(args: &SyscallArgs) -> Result<usize, SysError> {
     let addr = args.get_addr(0);
 
+    let now = signal::get_time_us();
     let tv = TimeVal {
-        sec: (*TICKS.lock() / 100) as u32,
-        usec: 0,
+        sec: (now / 1_000_000) as u32,
+        usec: (now % 1_000_000) as u32,
     };
 
     let src = unsafe {
@@ -178,5 +179,124 @@ pub fn sys_uname(args: &SyscallArgs) -> Result<usize, SysError> {
     };
     try_log!(proc::copy_to_user(src, addr).map_err(|_| SysError::BadAddress));
 
+    Ok(0)
+}
+
+pub fn sys_alarm(args: &SyscallArgs) -> Result<usize, SysError> {
+    let seconds = args.get_int(0) as usize;
+
+    let (_proc, data) = current_proc_and_data_mut();
+
+    let old_alarm = data.signals.get_alarm_time();
+    let now = signal::get_time_ms();
+
+    if seconds == 0 {
+        data.signals.set_alarm_time(0);
+    } else {
+        data.signals.set_alarm_time(now + seconds * 1000);
+    }
+
+    if old_alarm > now {
+        Ok((old_alarm - now + 999) / 1000)
+    } else {
+        Ok(0)
+    }
+}
+
+#[repr(C)]
+pub struct Tms {
+    pub utime: u32,
+    pub stime: u32,
+    pub cutime: u32,
+    pub cstime: u32,
+}
+
+pub fn sys_times(args: &SyscallArgs) -> Result<usize, SysError> {
+    let addr = args.get_addr(0);
+
+    let (_proc, data) = current_proc_and_data_mut();
+
+    let tms = Tms {
+        utime: data.utime as u32,
+        stime: data.stime as u32,
+        cutime: 0,
+        cstime: 0,
+    };
+
+    let src = unsafe {
+        core::slice::from_raw_parts(&tms as *const _ as *const u8, core::mem::size_of::<Tms>())
+    };
+    try_log!(proc::copy_to_user(src, addr).map_err(|_| SysError::BadAddress));
+
+    Ok(0)
+}
+
+pub fn sys_sync(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Ok(0)
+}
+
+pub fn sys_getpgrp(_args: &SyscallArgs) -> Result<usize, SysError> {
+    let pgrp = current_proc().data().pgrp;
+    Ok(*pgrp)
+}
+
+pub fn sys_setpgid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let pid = args.get_int(0) as usize;
+    let pgid = args.get_int(1) as usize;
+
+    let (current_proc, data) = current_proc_and_data_mut();
+    let current_pid = *current_proc.inner.lock().pid;
+
+    if pid == 0 || pid == current_pid {
+        if pgid == 0 {
+            // SAFETY: current_pid is a valid allocated PID
+            data.pgrp = unsafe { Pid::from_usize(current_pid) };
+        } else {
+            // SAFETY: pgid is assumed to be a valid PID
+            data.pgrp = unsafe { Pid::from_usize(pgid) };
+        }
+        Ok(0)
+    } else {
+        err!(SysError::NoProcess)
+    }
+}
+
+pub fn sys_setsid(_args: &SyscallArgs) -> Result<usize, SysError> {
+    let (proc, data) = current_proc_and_data_mut();
+    let pid = *proc.inner.lock().pid;
+
+    // SAFETY: pid is a valid allocated PID
+    data.pgrp = unsafe { Pid::from_usize(pid) };
+
+    Ok(pid)
+}
+
+pub fn sys_nice(args: &SyscallArgs) -> Result<usize, SysError> {
+    let incr = args.get_int(0) as i32;
+
+    let (_proc, data) = current_proc_and_data_mut();
+
+    let new_nice = (data.nice + incr).clamp(-20, 19);
+    data.nice = new_nice;
+
+    Ok(new_nice as usize)
+}
+
+#[repr(C)]
+pub struct Itimerval {
+    pub interval: TimeVal,
+    pub value: TimeVal,
+}
+
+pub fn sys_getitimer(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _which = args.get_int(0) as u32;
+    let _addr = args.get_addr(1);
+    Ok(0)
+}
+
+pub fn sys_setitimer(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _which = args.get_int(0) as u32;
+    let _addr = args.get_addr(1);
+    let _old_addr = args.get_addr(2);
     Ok(0)
 }

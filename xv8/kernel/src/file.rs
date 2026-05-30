@@ -359,7 +359,7 @@ impl File {
 
         match &file_inner.r#type {
             FileType::Inode { inode } | FileType::Device { inode, .. } => {
-                let mut inode = inode.clone();
+                let inode = inode.clone();
                 let mut inode_inner = inode.lock();
                 inode_inner.mode = (inode_inner.mode & !0o777) | (mode & 0o777);
                 inode.update(&inode_inner);
@@ -375,7 +375,7 @@ impl File {
 
         match &file_inner.r#type {
             FileType::Inode { inode } | FileType::Device { inode, .. } => {
-                let mut inode = inode.clone();
+                let inode = inode.clone();
                 let mut inode_inner = inode.lock();
                 inode_inner.uid = uid;
                 inode_inner.gid = gid;

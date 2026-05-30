@@ -8,6 +8,7 @@ fn type_char(t: InodeType) -> char {
         InodeType::File => 'f',
         InodeType::Directory => 'd',
         InodeType::Device => 'D',
+        InodeType::SymLink => 'l',
         InodeType::Free => '?',
     }
 }
@@ -33,7 +34,7 @@ fn ls(path: &str) {
                 let dir: &Directory = unsafe { &*(buf.as_ptr() as *const Directory) };
 
                 if dir.inum == 0 {
-                    continue; // empty slot
+                    continue;
                 }
 
                 let mut full_path = [0u8; MAXPATH];
@@ -46,39 +47,22 @@ fn ls(path: &str) {
                     .unwrap_or(dir.name.len());
 
                 full_path[..path_len].copy_from_slice(path.as_bytes());
-                if !path.ends_with('/') {
+                if !path.ends_with('/') && path_len < MAXPATH - 1 {
                     full_path[path_len] = b'/';
                     path_len += 1;
                 }
-                full_path[path_len..path_len + name_len].copy_from_slice(&dir.name[..name_len]);
-
-                let file_name = unsafe { str_from_cstr(&dir.name).expect("ls: malformed path") };
-                let file_path = unsafe { str_from_cstr(&full_path).expect("ls: malformed path") };
-
-                let Ok(file_fd) = open(file_path, OpenFlag::READ_ONLY) else {
-                    eprintln!("ls: cannot open {}", file_name);
-                    continue;
-                };
-
-                let mut file_stat = Stat::default();
-                if fstat(file_fd, &mut file_stat).is_err() {
-                    eprintln!("ls: cannot stat {}", file_name);
-                    let _ = close(file_fd);
-                    continue;
+                if name_len > 0 && path_len + name_len <= MAXPATH {
+                    full_path[path_len..path_len + name_len].copy_from_slice(&dir.name[..name_len]);
                 }
 
-                println!(
-                    "{} {:>4} {:>8} {}",
-                    type_char(file_stat.r#type),
-                    file_stat.ino,
-                    file_stat.size,
-                    file_name,
-                );
-
-                let _ = close(file_fd);
+                let file_path = match core::str::from_utf8(&full_path[..path_len + name_len]) {
+                    Ok(s) => s,
+                    Err(_) => continue,
+                };
+                ls(file_path);
             }
         }
-        InodeType::File | InodeType::Device => {
+        InodeType::File | InodeType::Device | InodeType::SymLink => {
             println!(
                 "{} {:>4} {:>8} {}",
                 type_char(stat.r#type),

@@ -8,6 +8,7 @@ use crate::riscv::{
     PGSIZE, interrupts,
     registers::{satp, scause, sepc, sstatus, stimecmp, stval, stvec, time, tp},
 };
+use crate::signal;
 use crate::spinlock::SpinLock;
 use crate::syscall::syscall;
 use crate::trampoline::{trampoline, userret, uservec};
@@ -226,7 +227,6 @@ pub unsafe fn kerneltrap() {
 /// Handles clock interrupts.
 pub fn clock_intr() {
     let _lock = proc::lock_current_cpu();
-    // # Safety: cpu is locked
     let hart = unsafe { proc::current_id() };
 
     if hart == 0 {
@@ -235,9 +235,6 @@ pub fn clock_intr() {
         proc::wakeup(Channel::Ticks);
     }
 
-    // Ask for the next timer interrupt.
-    // This also clears the interrupt request.
-    // 1_000_000 is about a tenth of a second.
     unsafe { stimecmp::write(time::read() + 1_000_000) };
 }
 
