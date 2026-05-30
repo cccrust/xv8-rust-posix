@@ -1,0 +1,194 @@
+[package]
+name = "user"
+version = "1.0.0"
+edition = "2024"
+authors = ["Boran Seckin <boran@boranseckin.com>"]
+description = "user space programs for xv8"
+repository = "https://github.com/cccrust/xv8-rust-posix"
+license = "MIT"
+keywords = ["riscv", "xv6"]
+
+[lib]
+name = "user"
+path = "src/lib.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "init"
+path = "bin/init.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "sh"
+path = "bin/sh.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "echo"
+path = "bin/echo.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "cat"
+path = "bin/cat.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "ls"
+path = "bin/ls.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "rm"
+path = "bin/rm.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "mkdir"
+path = "bin/mkdir.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "ln"
+path = "bin/ln.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "wc"
+path = "bin/wc.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "kill"
+path = "bin/kill.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "zombie"
+path = "bin/zombie.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "sleep"
+path = "bin/sleep.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "uptime"
+path = "bin/uptime.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "poweroff"
+path = "bin/poweroff.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "udp"
+path = "bin/udp.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "demo"
+path = "bin/demo.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "primes"
+path = "bin/primes.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_testrunner"
+path = "testbin/testrunner.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_sbrk"
+path = "testbin/sbrk.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_cow"
+path = "testbin/cow.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_fs"
+path = "testbin/fs.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_pipe"
+path = "testbin/pipe.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_proc"
+path = "testbin/proc.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_fd"
+path = "testbin/fd.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_net"
+path = "testbin/net.rs"
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }

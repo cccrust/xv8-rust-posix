@@ -1,0 +1,18 @@
+[package]
+name = "mkfs"
+version = "1.0.0"
+edition = "2024"
+authors = ["Boran Seckin <boran@boranseckin.com>"]
+description = "mkfs tool for xv8"
+repository = "https://github.com/cccrust/xv8-rust-posix"
+license = "MIT"
+keywords = ["riscv", "xv6"]
+
+[[bin]]
+name = "mkfs"
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+bytemuck = { version = "1.25", features = ["derive"] }
