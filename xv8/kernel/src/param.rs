@@ -45,3 +45,9 @@ pub const NKSTACK_PAGES: usize = 1;
 
 /// user stack pages
 pub const USERSTACK: usize = 4;
+
+/// max mmap regions per process
+pub const MMAP_REGIONS: usize = 16;
+
+/// mmap base address (below trapframe/trampoline)
+pub const MMAP_BASE: usize = crate::memlayout::TRAPFRAME - (256 * 1024 * 1024);

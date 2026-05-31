@@ -1,11 +1,14 @@
 use alloc::vec;
 
 use crate::memlayout::QEMU_POWER;
+use crate::param::MMAP_BASE;
 use crate::proc::{self, Channel, Pid, current_proc, current_proc_and_data_mut};
 use crate::rng::rand_bytes;
+use crate::riscv::{pg_round_up, PGSIZE};
 use crate::signal;
 use crate::syscall::{SysError, SyscallArgs};
 use crate::trap::TICKS;
+use crate::vm::VA;
 
 pub fn sys_exit(args: &SyscallArgs) -> ! {
     let n = args.get_int(0);
@@ -386,5 +389,46 @@ pub fn sys_setitimer(args: &SyscallArgs) -> Result<usize, SysError> {
     let _which = args.get_int(0) as u32;
     let _addr = args.get_addr(1);
     let _old_addr = args.get_addr(2);
+    Ok(0)
+}
+
+pub fn sys_mmap(args: &SyscallArgs) -> Result<usize, SysError> {
+    let addr = args.get_addr(0);
+    let length = args.get_int(1) as usize;
+    let _prot = args.get_int(2) as usize;
+    let flags = args.get_int(3) as usize;
+    let _fd = args.get_int(4) as isize;
+    let _offset = args.get_int(5) as usize;
+
+    if length == 0 {
+        err!(SysError::InvalidArgument);
+    }
+
+    if flags & 0x2 == 0 {
+        err!(SysError::InvalidArgument);
+    }
+
+    if addr.as_usize() == 0 {
+        let length = pg_round_up(length);
+        let (proc, data) = current_proc_and_data_mut();
+        let mut mmap_next = data.mmap_next;
+        if mmap_next.as_usize() < length {
+            err!(SysError::OutOfMemory);
+        }
+        let new_mmap_next = VA::from(mmap_next.as_usize() - length);
+        data.mmap_next = new_mmap_next;
+        Ok(new_mmap_next.as_usize())
+    } else {
+        err!(SysError::NotImplemented)
+    }
+}
+
+pub fn sys_munmap(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _addr = args.get_addr(0);
+    let _length = args.get_int(1) as usize;
+    Ok(0)
+}
+
+pub fn sys_mprotect(_args: &SyscallArgs) -> Result<usize, SysError> {
     Ok(0)
 }

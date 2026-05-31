@@ -75,6 +75,24 @@ pub mod raw {
         ret
     }
 
+    #[inline(always)]
+    fn syscall6(syscall: Syscall, a0: usize, a1: usize, a2: usize, a3: usize, a4: usize, a5: usize) -> isize {
+        let ret: isize;
+        unsafe {
+            asm!(
+                "ecall",
+                in("a7") syscall as usize,
+                inlateout("a0") a0 as isize => ret,
+                in("a1") a1,
+                in("a2") a2,
+                in("a3") a3,
+                in("a4") a4,
+                in("a5") a5,
+            );
+        }
+        ret
+    }
+
     pub fn fork() -> isize {
         syscall0(Syscall::Fork)
     }
@@ -245,6 +263,18 @@ pub mod raw {
 
     pub fn tcsetattr(fd: usize, addr: usize, opt: usize) -> isize {
         syscall3(Syscall::Tcsetattr, fd, addr, opt)
+    }
+
+    pub fn mmap(addr: usize, length: usize, prot: usize, flags: usize, fd: isize, offset: usize) -> isize {
+        syscall6(Syscall::Mmap, addr, length, prot, flags, fd as usize, offset)
+    }
+
+    pub fn munmap(addr: usize, length: usize) -> isize {
+        syscall2(Syscall::Munmap, addr, length)
+    }
+
+    pub fn mprotect(addr: usize, length: usize, prot: usize) -> isize {
+        syscall3(Syscall::Mprotect, addr, length, prot)
     }
 }
 
@@ -521,4 +551,16 @@ pub fn tcgetattr(_fd: Fd, _attr: &mut [u8]) -> Result<(), SysError> {
 
 pub fn tcsetattr(_fd: Fd, _attr: &[u8], _opt: usize) -> Result<(), SysError> {
     check_unit(raw::tcsetattr(_fd.as_raw(), _attr.as_ptr() as usize, _opt))
+}
+
+pub fn mmap(addr: usize, length: usize, prot: usize, flags: usize, fd: isize, offset: usize) -> Result<usize, SysError> {
+    check(raw::mmap(addr, length, prot, flags, fd, offset))
+}
+
+pub fn munmap(addr: usize, length: usize) -> Result<(), SysError> {
+    check_unit(raw::munmap(addr, length))
+}
+
+pub fn mprotect(addr: usize, length: usize, prot: usize) -> Result<(), SysError> {
+    check_unit(raw::mprotect(addr, length, prot))
 }

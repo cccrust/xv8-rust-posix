@@ -211,26 +211,26 @@ struct PageTableEntry(usize);
 
 impl PageTableEntry {
     /// Check if the PTE is valid.
-    fn is_v(&self) -> bool {
+    pub fn is_v(&self) -> bool {
         *self & PTE_V != 0
     }
 
     /// Check if the PTE is accessible by user mode instructions.
-    fn is_u(&self) -> bool {
+    pub fn is_u(&self) -> bool {
         *self & PTE_U != 0
     }
 
     /// Check if the PTE is writable.
-    fn is_w(&self) -> bool {
+    pub fn is_w(&self) -> bool {
         *self & PTE_W != 0
     }
 
-    fn is_cow(&self) -> bool {
+    pub fn is_cow(&self) -> bool {
         *self & PTE_COW != 0
     }
 
     /// Return flags of the PTE (least significant 10 bits).
-    fn flags(&self) -> usize {
+    pub fn flags(&self) -> usize {
         pte_flags(self.as_usize())
     }
 
@@ -377,10 +377,10 @@ impl PageTable {
         }
     }
 
-    /// Returns a reference to the PTE in page table that corresponds to virtual address `va`.
-    ///
-    /// Returns an error if any required page-table page doesn't exist.
-    fn walk(&self, va: VA) -> Result<&PageTableEntry, VmError> {
+/// Returns a reference to the PTE in page table that corresponds to virtual address `va`.
+///
+/// Returns an error if any required page-table page doesn't exist.
+    pub fn walk(&self, va: VA) -> Result<&PageTableEntry, VmError> {
         unsafe { Self::walk_raw(self.ptr, va, false).map(|p| &*p) }
     }
 

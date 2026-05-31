@@ -155,6 +155,12 @@ impl From<NetError> for SysError {
     }
 }
 
+impl From<crate::vm::VmError> for SysError {
+    fn from(_value: crate::vm::VmError) -> Self {
+        SysError::OutOfMemory
+    }
+}
+
 /// Wrapper for extracting typed syscall arguments from trapframe.
 pub struct SyscallArgs<'a> {
     trapframe: &'a TrapFrame,
@@ -306,6 +312,9 @@ pub enum Syscall {
     Isatty = 59,
     Tcgetattr = 60,
     Tcsetattr = 61,
+    Mmap = 62,
+    Munmap = 63,
+    Mprotect = 64,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -374,6 +383,9 @@ impl TryFrom<usize> for Syscall {
             59 => Ok(Syscall::Isatty),
             60 => Ok(Syscall::Tcgetattr),
             61 => Ok(Syscall::Tcsetattr),
+            62 => Ok(Syscall::Mmap),
+            63 => Ok(Syscall::Munmap),
+            64 => Ok(Syscall::Mprotect),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -451,6 +463,9 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Isatty => sys_isatty(&args),
             Syscall::Tcgetattr => sys_tcgetattr(&args),
             Syscall::Tcsetattr => sys_tcsetattr(&args),
+            Syscall::Mmap => sys_mmap(&args),
+            Syscall::Munmap => sys_munmap(&args),
+            Syscall::Mprotect => sys_mprotect(&args),
         },
         Err(e) => Err(e),
     };

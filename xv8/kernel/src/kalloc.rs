@@ -33,6 +33,21 @@ pub fn increment_ref(pa: PA) {
     PAGE_REFS[(pa.as_usize() - KERNBASE) / PGSIZE].fetch_add(1, Ordering::Relaxed);
 }
 
+pub fn alloc_page() -> Option<*mut u8> {
+    let layout = core::alloc::Layout::from_size_align(PGSIZE, PGSIZE).unwrap();
+    let ptr = unsafe { KMEM.alloc(layout) };
+    if ptr.is_null() {
+        None
+    } else {
+        Some(ptr)
+    }
+}
+
+pub fn free_page(ptr: *mut u8) {
+    let layout = core::alloc::Layout::from_size_align(PGSIZE, PGSIZE).unwrap();
+    unsafe { KMEM.dealloc(ptr, layout) };
+}
+
 /// Kernel memory allocator
 #[global_allocator]
 static KMEM: Kmem = Kmem(SpinLock::new(None, "kmem"));
