@@ -315,6 +315,11 @@ pub enum Syscall {
     Mmap = 62,
     Munmap = 63,
     Mprotect = 64,
+    Time = 66,
+    Nanosleep = 67,
+    ClockGetTime = 68,
+    ClockGetRes = 69,
+    ClockSetTime = 70,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -386,6 +391,11 @@ impl TryFrom<usize> for Syscall {
             62 => Ok(Syscall::Mmap),
             63 => Ok(Syscall::Munmap),
             64 => Ok(Syscall::Mprotect),
+            66 => Ok(Syscall::Time),
+            67 => Ok(Syscall::Nanosleep),
+            68 => Ok(Syscall::ClockGetTime),
+            69 => Ok(Syscall::ClockGetRes),
+            70 => Ok(Syscall::ClockSetTime),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -466,6 +476,11 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Mmap => sys_mmap(&args),
             Syscall::Munmap => sys_munmap(&args),
             Syscall::Mprotect => sys_mprotect(&args),
+            Syscall::Time => sys_time(&args),
+            Syscall::Nanosleep => sys_nanosleep(&args),
+            Syscall::ClockGetTime => sys_clock_gettime(&args),
+            Syscall::ClockGetRes => sys_clock_getres(&args),
+            Syscall::ClockSetTime => sys_clock_settime(&args),
         },
         Err(e) => Err(e),
     };

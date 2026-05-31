@@ -81,6 +81,27 @@ fn test_tcgetattr_tcsetattr() {
     tcsetattr(Fd::STDIN, &attr, 0).expect("tcsetattr");
 }
 
+fn test_time() {
+    let t = time().expect("time should work");
+    let _ = t; // 时间值可能为 0（系统刚启动）
+}
+
+fn test_nanosleep() {
+    nanosleep(0, 100_000_000).expect("nanosleep 100ms"); // 100ms = 0.1s
+}
+
+fn test_clock_gettime() {
+    let (sec, nsec) = clock_gettime().expect("clock_gettime should work");
+    let _ = sec;
+    let _ = nsec; // 值可能為 0（系統剛啟動）
+}
+
+fn test_clock_getres() {
+    let (sec, nsec) = clock_getres().expect("clock_getres should work");
+    let _ = sec;
+    let _ = nsec;
+}
+
 #[unsafe(no_mangle)]
 fn main(_args: Args) {
     test_dup2();
@@ -89,4 +110,8 @@ fn main(_args: Args) {
     test_getpgid();
     test_isatty();
     test_tcgetattr_tcsetattr();
+    test_time();
+    test_nanosleep();
+    test_clock_gettime();
+    test_clock_getres();
 }

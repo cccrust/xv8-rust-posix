@@ -432,3 +432,72 @@ pub fn sys_munmap(args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_mprotect(_args: &SyscallArgs) -> Result<usize, SysError> {
     Ok(0)
 }
+
+pub fn sys_time(args: &SyscallArgs) -> Result<usize, SysError> {
+    let t = *TICKS.lock();
+    Ok(t / 100) // TICKS 以 10ms 为单位，转为秒
+}
+
+pub fn sys_nanosleep(args: &SyscallArgs) -> Result<usize, SysError> {
+    let req_addr = args.get_addr(0);
+    let _rem_addr = args.get_addr(1);
+
+    let mut buf = [0u8; 16];
+    let (_proc, data) = current_proc_and_data_mut();
+    if data.pagetable_mut().copy_from(req_addr, &mut buf).is_err() {
+        err!(SysError::BadAddress);
+    }
+
+    let sec = u64::from_le_bytes([buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]]);
+    let _nsec = u64::from_le_bytes([buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15]]);
+
+    let total_ticks = (sec * 100) as usize;
+
+    let mut ticks = TICKS.lock();
+    let ticks0 = *ticks;
+
+    while *ticks - ticks0 < total_ticks {
+        if current_proc().is_killed() {
+            return Err(SysError::Interrupted);
+        }
+        ticks = proc::sleep(Channel::Ticks, ticks);
+    }
+
+    Ok(0)
+}
+
+pub fn sys_clock_gettime(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _clock_id = args.get_int(0) as usize;
+    let ts_addr = args.get_addr(1);
+
+    let t = *TICKS.lock();
+
+    let sec = (t / 100) as u64;
+    let nsec = ((t % 100) * 10_000_000) as u64;
+    let mut ts = [0u8; 16];
+    ts[..8].copy_from_slice(&sec.to_le_bytes());
+    ts[8..].copy_from_slice(&nsec.to_le_bytes());
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let _ = data.pagetable_mut().copy_to(&ts, ts_addr);
+
+    Ok(0)
+}
+
+pub fn sys_clock_getres(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _clock_id = args.get_int(0) as usize;
+    let ts_addr = args.get_addr(1);
+
+    let ts = [0u64.to_le_bytes(), 100u64.to_le_bytes()].concat(); // 0 sec, 100 nsec resolution
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let _ = data.pagetable_mut().copy_to(&ts, ts_addr);
+
+    Ok(0)
+}
+
+pub fn sys_clock_settime(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _clock_id = args.get_int(0) as usize;
+    let _ts_addr = args.get_addr(1);
+    Ok(0)
+}

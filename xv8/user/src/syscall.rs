@@ -276,6 +276,26 @@ pub mod raw {
     pub fn mprotect(addr: usize, length: usize, prot: usize) -> isize {
         syscall3(Syscall::Mprotect, addr, length, prot)
     }
+
+    pub fn time(addr: usize) -> isize {
+        syscall1(Syscall::Time, addr)
+    }
+
+    pub fn nanosleep(req: usize, _rem: usize) -> isize {
+        syscall2(Syscall::Nanosleep, req, _rem)
+    }
+
+    pub fn clock_gettime(clock_id: usize, ts_addr: usize) -> isize {
+        syscall2(Syscall::ClockGetTime, clock_id, ts_addr)
+    }
+
+    pub fn clock_getres(clock_id: usize, ts_addr: usize) -> isize {
+        syscall2(Syscall::ClockGetRes, clock_id, ts_addr)
+    }
+
+    pub fn clock_settime(clock_id: usize, ts_addr: usize) -> isize {
+        syscall2(Syscall::ClockSetTime, clock_id, ts_addr)
+    }
 }
 
 use kernel::abi::{MAXPATH, Stat, SysError};
@@ -563,4 +583,36 @@ pub fn munmap(addr: usize, length: usize) -> Result<(), SysError> {
 
 pub fn mprotect(addr: usize, length: usize, prot: usize) -> Result<(), SysError> {
     check_unit(raw::mprotect(addr, length, prot))
+}
+
+pub fn time() -> Result<usize, SysError> {
+    check(raw::time(0))
+}
+
+pub fn nanosleep(sec: u64, nsec: u64) -> Result<(), SysError> {
+    let req = [sec, nsec];
+    let mut buf = [0u8; 16];
+    buf[..8].copy_from_slice(&req[0].to_le_bytes());
+    buf[8..].copy_from_slice(&req[1].to_le_bytes());
+    check_unit(raw::nanosleep(&buf as *const _ as usize, 0))
+}
+
+pub fn clock_gettime() -> Result<(u64, u64), SysError> {
+    let mut ts = [0u8; 16];
+    check(raw::clock_gettime(0, ts.as_mut_ptr() as usize))?;
+    let sec = u64::from_le_bytes([ts[0], ts[1], ts[2], ts[3], ts[4], ts[5], ts[6], ts[7]]);
+    let nsec = u64::from_le_bytes([ts[8], ts[9], ts[10], ts[11], ts[12], ts[13], ts[14], ts[15]]);
+    Ok((sec, nsec))
+}
+
+pub fn clock_getres() -> Result<(u64, u64), SysError> {
+    let mut ts = [0u8; 16];
+    check(raw::clock_getres(0, ts.as_mut_ptr() as usize))?;
+    let sec = u64::from_le_bytes([ts[0], ts[1], ts[2], ts[3], ts[4], ts[5], ts[6], ts[7]]);
+    let nsec = u64::from_le_bytes([ts[8], ts[9], ts[10], ts[11], ts[12], ts[13], ts[14], ts[15]]);
+    Ok((sec, nsec))
+}
+
+pub fn clock_settime(_sec: u64, _nsec: u64) -> Result<(), SysError> {
+    check_unit(raw::clock_settime(0, 0))
 }

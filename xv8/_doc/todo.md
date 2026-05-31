@@ -1,20 +1,10 @@
 # xv8 POSIX System Call 實作規劃
 
-## 目前狀態 (v0.6)
+## 目前狀態 (v0.7)
 
-已完成 v0.5 和 v0.6，已實作 **65 個** system calls。
+已完成 v0.5、v0.6 和 v0.7，已實作 **70 個** system calls。
 
 ## 待實作項目
-
-### v0.7 - 時間與計時器
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| time | 66 | 取得時間（秒） |
-| nanosleep | 67 | 高精度睡眠 |
-| clock_gettime | 68 | 取得時鐘時間 |
-| clock_getres | 69 | 取得時鐘解析度 |
-| clock_settime | 70 | 設定時鐘時間 |
 
 ### v0.8 - 分散式 I/O
 
