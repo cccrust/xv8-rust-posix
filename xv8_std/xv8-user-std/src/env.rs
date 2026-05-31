@@ -23,10 +23,20 @@ impl Iterator for EnvArgs {
 
 pub fn args() -> EnvArgs { EnvArgs::new() }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum VarError {
+    NotPresent,
+    NotUnicode(alloc::string::String),
+}
+
 pub struct EmptyEnvVars;
 impl Iterator for EmptyEnvVars {
     type Item = (String, String);
     fn next(&mut self) -> Option<Self::Item> { None }
+}
+
+pub fn var(_key: &str) -> Result<String, VarError> {
+    Err(VarError::NotPresent)
 }
 
 pub fn vars() -> EmptyEnvVars { EmptyEnvVars }
@@ -40,3 +50,6 @@ pub fn set_current_dir(path: &super::path::Path) -> super::io::Result<()> {
     let n = xv8_libc::chdir(path_str.as_ptr());
     if n < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
+
+pub fn set_var(_key: &str, _value: &str) { }
+pub fn remove_var(_key: &str) { }

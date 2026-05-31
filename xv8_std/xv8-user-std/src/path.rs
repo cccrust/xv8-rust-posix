@@ -17,15 +17,35 @@ impl Path {
         let s = self.to_str()?;
         s.rfind('/').map(|i| Path::new(&s[i+1..]))
     }
+    pub fn file_stem(&self) -> Option<&Path> {
+        let name = self.file_name()?;
+        let s = name.to_str()?;
+        let stem = s.rfind('.').map(|i| &s[..i]).unwrap_or(s);
+        Some(Path::new(stem))
+    }
     pub fn parent(&self) -> Option<&Path> {
         let s = self.to_str()?;
         s.rfind('/').map(|i| Path::new(&s[..i]))
     }
     pub fn is_absolute(&self) -> bool { false }
     pub fn is_relative(&self) -> bool { true }
+    pub fn is_dir(&self) -> bool { self.exists() && self.metadata().map(|m| m.is_dir()).unwrap_or(false) }
+    pub fn is_file(&self) -> bool { self.exists() && self.metadata().map(|m| m.is_file()).unwrap_or(false) }
+    pub fn as_os_str(&self) -> &str { self.to_str().unwrap_or("") }
     pub fn ends_with(&self, _other: &Path) -> bool { false }
     pub fn starts_with(&self, _other: &Path) -> bool { false }
-    pub fn join(&self, _other: &Path) -> PathBuf { PathBuf { inner: self.inner.as_ref().to_vec() } }
+    pub fn join<P: AsRef<Path>>(&self, other: P) -> PathBuf { PathBuf { inner: self.inner.as_ref().to_vec() } }
+    pub fn metadata(&self) -> super::io::Result<super::fs::Metadata> {
+        let path_str = self.to_str().unwrap_or("");
+        let fd = xv8_libc::open(path_str.as_ptr(), xv8_libc::OpenFlag::READ_ONLY);
+        if fd < 0 {
+            Err(super::io::ErrorKind::NotFound.into())
+        } else {
+            let meta = super::fs::Metadata::from_fd(fd as usize);
+            xv8_libc::close(fd as usize);
+            meta
+        }
+    }
     pub fn to_path_buf(&self) -> PathBuf { PathBuf { inner: self.inner.as_ref().to_vec() } }
     pub fn to_string_lossy(&self) -> alloc::string::String { self.to_str().unwrap_or("?").to_string() }
     pub fn display(&self) -> DisplayPath<'_> { DisplayPath(self) }
@@ -41,8 +61,20 @@ impl Path {
     }
 }
 
+impl<'a> Default for &'a Path {
+    fn default() -> &'a Path { Path::new("") }
+}
+
 impl core::convert::AsRef<Path> for Path {
     fn as_ref(&self) -> &Path { self }
+}
+
+impl core::convert::AsRef<Path> for str {
+    fn as_ref(&self) -> &Path { Path::new(self) }
+}
+
+impl core::convert::AsRef<Path> for alloc::string::String {
+    fn as_ref(&self) -> &Path { Path::new(self.as_str()) }
 }
 
 impl<'a> core::convert::TryFrom<&'a Path> for &'a str {
@@ -63,7 +95,12 @@ impl PathBuf {
     pub fn set_file_name(&mut self, _name: &str) {}
     pub fn with_extension(&self, _ext: &str) -> Self { self.clone() }
     pub fn to_str(&self) -> Option<&str> { self.as_path().to_str() }
-    pub fn as_os_str(&self) -> &str { "" }
+    pub fn to_string_lossy(&self) -> alloc::string::String { self.as_path().to_string_lossy() }
+    pub fn as_os_str(&self) -> &str { self.as_path().as_os_str() }
+    pub fn exists(&self) -> bool { self.as_path().exists() }
+    pub fn is_dir(&self) -> bool { self.as_path().is_dir() }
+    pub fn is_file(&self) -> bool { self.as_path().is_file() }
+    pub fn display(&self) -> DisplayPath<'_> { DisplayPath(self.as_path()) }
 }
 
 impl Default for PathBuf {
@@ -72,6 +109,15 @@ impl Default for PathBuf {
 
 impl Clone for PathBuf {
     fn clone(&self) -> Self { PathBuf { inner: self.inner.clone() } }
+}
+
+impl core::convert::AsRef<Path> for PathBuf {
+    fn as_ref(&self) -> &Path { self.as_path() }
+}
+
+impl core::ops::Deref for PathBuf {
+    type Target = Path;
+    fn deref(&self) -> &Path { self.as_path() }
 }
 
 impl alloc::fmt::Display for Path {

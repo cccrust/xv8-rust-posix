@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 xv8-libc = { path = "../xv8-libc" }
+hashbrown = "0.15"
 
 [features]
 default = []

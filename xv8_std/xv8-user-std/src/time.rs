@@ -16,6 +16,12 @@ impl Duration {
     pub const fn from_millis(millis: u64) -> Self {
         Duration { secs: millis / 1000, nanos: ((millis % 1000) * 1_000_000) as u32 }
     }
+    pub fn subsec_nanos(&self) -> u32 { self.nanos }
+    pub fn subsec_millis(&self) -> u32 { self.nanos / 1_000_000 }
+}
+
+impl Default for Duration {
+    fn default() -> Self { Duration::new(0, 0) }
 }
 
 #[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
@@ -29,4 +35,35 @@ impl SystemTime {
         Ok(Duration::new(0, 0))
     }
     pub fn elapsed(&self) -> Result<Duration, ()> { Ok(Duration::new(0, 0)) }
+}
+
+impl core::ops::Add<Duration> for SystemTime {
+    type Output = SystemTime;
+    fn add(self, _other: Duration) -> SystemTime { self }
+}
+
+#[derive(Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Debug)]
+pub struct Instant { secs: u64, nanos: u32 }
+
+impl Instant {
+    pub fn now() -> Self { Instant { secs: 0, nanos: 0 } }
+    pub fn duration_since(&self, _earlier: Instant) -> Duration { Duration::new(0, 0) }
+    pub fn elapsed(&self) -> Duration { Duration::new(0, 0) }
+    pub fn checked_add(&self, _other: Duration) -> Option<Instant> { Some(*self) }
+    pub fn checked_sub(&self, _other: Duration) -> Option<Instant> { Some(*self) }
+}
+
+impl core::ops::Sub<Instant> for Instant {
+    type Output = Duration;
+    fn sub(self, _other: Instant) -> Duration { Duration::new(0, 0) }
+}
+
+impl core::ops::Sub<Duration> for Instant {
+    type Output = Instant;
+    fn sub(self, _other: Duration) -> Instant { self }
+}
+
+impl core::ops::Add<Duration> for Instant {
+    type Output = Instant;
+    fn add(self, _other: Duration) -> Instant { self }
 }

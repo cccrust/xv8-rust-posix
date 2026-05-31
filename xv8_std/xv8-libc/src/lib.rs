@@ -3,7 +3,7 @@
 pub mod raw;
 pub mod args;
 
-pub use raw::{read, write, open, close, lseek, fstat, exit, getpid, chdir, Stat};
+pub use raw::{read, write, open, close, lseek, fstat, exit, getpid, chdir, sbrk, Stat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fd(usize);

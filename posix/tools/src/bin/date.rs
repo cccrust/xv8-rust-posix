@@ -81,7 +81,7 @@ fn main() {
                 if days_remaining < md { month = (i + 1) as u32; break; }
                 days_remaining -= md;
             }
-            emit_format(&format, year, month, (days_remaining + 1) as u32, hour as u32, minute as u32, sec as u32);
+            emit_format(&format, year as i32, month, (days_remaining + 1) as u32, hour as u32, minute as u32, sec as u32);
         }
     }
 }

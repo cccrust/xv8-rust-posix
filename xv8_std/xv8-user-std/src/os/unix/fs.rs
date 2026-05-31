@@ -27,3 +27,7 @@ impl PermissionsExt for fs::Permissions {
     fn mode(&self) -> u32 { self.mode }
     fn set_mode(&mut self, mode: u32) { self.mode = mode; }
 }
+
+pub fn symlink<P: AsRef<crate::path::Path>, Q: AsRef<crate::path::Path>>(_src: P, _dst: Q) -> crate::io::Result<()> {
+    Err(crate::io::ErrorKind::Unsupported.into())
+}

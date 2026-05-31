@@ -11,6 +11,7 @@ pub enum Syscall {
     Exit = 2,
     Getpid = 11,
     Chdir = 9,
+    Sbrk = 12,
 }
 
 #[inline(always)]
@@ -90,6 +91,10 @@ pub fn getpid() -> isize {
 
 pub fn chdir(path: *const u8) -> isize {
     syscall1(Syscall::Chdir, path as usize)
+}
+
+pub fn sbrk(n: isize) -> isize {
+    syscall1(Syscall::Sbrk, n as usize)
 }
 
 #[repr(C)]

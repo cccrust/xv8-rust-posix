@@ -33,4 +33,6 @@ fn format_time(secs: i64) -> String {
         let mon = months[tm.tm_mon as usize];
         format!("{} {:2} {:02}:{:02}", mon, tm.tm_mday, tm.tm_hour, tm.tm_min)
     }
+    #[cfg(not(unix))]
+    { format!("? ? ??:??") }
 }

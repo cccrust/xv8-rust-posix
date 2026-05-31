@@ -2,6 +2,57 @@ use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::fmt;
 
+use crate::path::Path;
+
+pub struct OsStr {
+    inner: [u8],
+}
+
+impl OsStr {
+    pub fn from_str(s: &str) -> &OsStr {
+        unsafe { &*(s.as_bytes() as *const [u8] as *const OsStr) }
+    }
+    pub fn to_str(&self) -> Result<&str, core::str::Utf8Error> {
+        core::str::from_utf8(&self.inner)
+    }
+    pub fn to_string_lossy(&self) -> alloc::string::String {
+        self.to_str().unwrap_or("<invalid>").to_string()
+    }
+    pub fn as_encoded_bytes(&self) -> &[u8] {
+        &self.inner
+    }
+}
+
+impl core::fmt::Debug for OsStr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.to_str().fmt(f)
+    }
+}
+
+impl PartialEq for OsStr {
+    fn eq(&self, other: &Self) -> bool {
+        self.inner == other.inner
+    }
+}
+impl Eq for OsStr {}
+
+impl PartialOrd for OsStr {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for OsStr {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.inner.cmp(&other.inner)
+    }
+}
+
+impl core::convert::AsRef<Path> for OsStr {
+    fn as_ref(&self) -> &Path {
+        Path::new(&self.inner)
+    }
+}
+
 pub struct CStr {
     inner: [u8],
 }
@@ -39,6 +90,13 @@ impl CString {
     pub fn as_c_str(&self) -> &CStr {
         unsafe { &*(self.inner.as_slice() as *const [u8] as *const CStr) }
     }
+    pub fn as_ptr(&self) -> *const u8 {
+        self.inner.as_ptr()
+    }
+}
+
+impl Default for CString {
+    fn default() -> Self { CString { inner: Vec::new() } }
 }
 
 #[derive(Debug, Clone)]

@@ -1,3 +1,4 @@
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
@@ -52,12 +53,12 @@ impl From<ErrorKind> for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(msg) = self.message {
-            write!(f, "{}", msg)
-        } else {
-            write!(f, "{:?}", self.kind)
-        }
+        write!(f, "{:?}", self.kind)
     }
+}
+
+impl crate::error::Error for Error {
+    fn source(&self) -> Option<&(dyn crate::error::Error + 'static)> { None }
 }
 
 pub trait Read {
@@ -93,6 +94,16 @@ pub trait Read {
 
     fn take(self, limit: u64) -> Take<Self> where Self: Sized {
         Take { inner: self, limit }
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
+        let mut offset = 0;
+        while offset < buf.len() {
+            let n = self.read(&mut buf[offset..])?;
+            if n == 0 { return Err(ErrorKind::UnexpectedEof.into()); }
+            offset += n;
+        }
+        Ok(())
     }
 }
 
@@ -160,6 +171,29 @@ pub trait BufRead: Read {
     fn lines(self) -> Lines<Self> where Self: Sized {
         Lines { inner: self }
     }
+}
+
+impl<T: Read + ?Sized> Read for Box<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> { (**self).read(buf) }
+}
+
+impl<T: Read + ?Sized> Read for &mut T {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> { (**self).read(buf) }
+}
+
+impl<T: BufRead + ?Sized> BufRead for Box<T> {
+    fn fill_buf(&mut self) -> Result<&[u8]> { (**self).fill_buf() }
+    fn consume(&mut self, amt: usize) { (**self).consume(amt) }
+}
+
+impl<T: Write + ?Sized> Write for Box<T> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> { (**self).write(buf) }
+    fn flush(&mut self) -> Result<()> { (**self).flush() }
+}
+
+impl<T: Write + ?Sized> Write for &mut T {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> { (**self).write(buf) }
+    fn flush(&mut self) -> Result<()> { (**self).flush() }
 }
 
 pub trait Seek {
@@ -248,6 +282,18 @@ impl Stdin {
     pub fn read_line(&self, buf: &mut String) -> Result<usize> {
         self.lock().read_line(buf)
     }
+    pub fn lines(self) -> Lines<StdinLock> {
+        Lines { inner: self.lock() }
+    }
+    pub fn is_terminal(&self) -> bool { false }
+}
+
+impl Write for Stdin {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let n = xv8_libc::write(0, buf.as_ptr(), buf.len());
+        if n < 0 { Err(ErrorKind::Other.into()) } else { Ok(n as usize) }
+    }
+    fn flush(&mut self) -> Result<()> { Ok(()) }
 }
 
 impl Read for Stdin {
@@ -400,3 +446,22 @@ impl<T: Read> Read for Take<T> {
 pub fn stdin() -> Stdin { Stdin }
 pub fn stdout() -> Stdout { Stdout }
 pub fn stderr() -> Stderr { Stderr }
+
+pub trait IsTerminal {
+    fn is_terminal(&self) -> bool;
+}
+
+impl IsTerminal for Stdin { fn is_terminal(&self) -> bool { false } }
+impl IsTerminal for Stdout { fn is_terminal(&self) -> bool { false } }
+impl IsTerminal for Stderr { fn is_terminal(&self) -> bool { false } }
+impl IsTerminal for StdinLock { fn is_terminal(&self) -> bool { false } }
+impl IsTerminal for StdoutLock { fn is_terminal(&self) -> bool { false } }
+impl IsTerminal for StderrLock { fn is_terminal(&self) -> bool { false } }
+
+pub fn _print(args: core::fmt::Arguments<'_>) {
+    let _ = Stdout.write_fmt(args);
+}
+
+pub fn _eprint(args: core::fmt::Arguments<'_>) {
+    let _ = Stderr.write_fmt(args);
+}

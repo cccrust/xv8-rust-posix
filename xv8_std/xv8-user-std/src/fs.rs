@@ -31,6 +31,17 @@ impl Metadata {
     pub fn is_file(&self) -> bool { (self.mode & 0o170000) == 0o100000 }
     pub fn permissions(&self) -> Permissions { Permissions { mode: self.mode } }
     pub fn len(&self) -> u64 { self.size }
+    pub fn blocks(&self) -> u64 { (self.size + 511) / 512 }
+    pub fn accessed(&self) -> super::io::Result<super::time::SystemTime> { Ok(super::time::UNIX_EPOCH) }
+    pub fn modified(&self) -> super::io::Result<super::time::SystemTime> { Ok(super::time::UNIX_EPOCH) }
+    pub fn created(&self) -> super::io::Result<super::time::SystemTime> { Ok(super::time::UNIX_EPOCH) }
+    pub fn uid(&self) -> u32 { self.uid }
+    pub fn gid(&self) -> u32 { self.gid }
+    pub fn file_type(&self) -> FileType {
+        if self.is_dir() { FileType::Directory }
+        else if self.is_file() { FileType::RegularFile }
+        else { FileType::Other }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -38,22 +49,24 @@ pub struct Permissions { pub mode: u32 }
 impl Permissions {
     pub fn mode(&self) -> u32 { self.mode }
     pub fn set_mode(&mut self, mode: u32) { self.mode = mode; }
+    pub fn from_mode(mode: u32) -> Self { Permissions { mode } }
 }
 
 pub struct File { fd: usize }
 
 impl File {
-    pub fn open(path: &super::path::Path) -> super::io::Result<Self> {
-        let path_str = path.to_str().unwrap_or("");
+    pub fn open<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Self> {
+        let path_str = path.as_ref().to_str().unwrap_or("");
         let fd = xv8_libc::open(path_str.as_ptr(), xv8_libc::OpenFlag::READ_ONLY);
         if fd < 0 { Err(super::io::ErrorKind::NotFound.into()) } else { Ok(File { fd: fd as usize }) }
     }
-    pub fn create(path: &super::path::Path) -> super::io::Result<Self> {
-        let path_str = path.to_str().unwrap_or("");
+    pub fn create<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Self> {
+        let path_str = path.as_ref().to_str().unwrap_or("");
         let flags = xv8_libc::OpenFlag::WRITE_ONLY | xv8_libc::OpenFlag::CREATE | xv8_libc::OpenFlag::TRUNCATE;
         let fd = xv8_libc::open(path_str.as_ptr(), flags);
         if fd < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(File { fd: fd as usize }) }
     }
+    pub fn options() -> OpenOptions { OpenOptions::new() }
     pub fn read_raw(&self, buf: &mut [u8]) -> super::io::Result<usize> {
         let n = xv8_libc::read(self.fd, buf.as_mut_ptr(), buf.len());
         if n < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(n as usize) }
@@ -89,10 +102,23 @@ impl Drop for File {
     }
 }
 
+impl super::io::Seek for File {
+    fn seek(&mut self, pos: super::io::SeekFrom) -> super::io::Result<u64> {
+        let (whence, offset) = match pos {
+            super::io::SeekFrom::Start(n) => (0, n as isize),
+            super::io::SeekFrom::Current(n) => (1, n as isize),
+            super::io::SeekFrom::End(n) => (2, n as isize),
+        };
+        let n = xv8_libc::lseek(self.fd, offset, whence);
+        if n < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(n as u64) }
+    }
+}
+
 pub struct OpenOptions {
     read: bool,
     write: bool,
     create: bool,
+    create_new: bool,
     truncate: bool,
     append: bool,
     mode: u32,
@@ -100,21 +126,23 @@ pub struct OpenOptions {
 
 impl OpenOptions {
     pub fn new() -> Self {
-        OpenOptions { read: false, write: false, create: false, truncate: false, append: false, mode: 0o644 }
+        OpenOptions { read: false, write: false, create: false, create_new: false, truncate: false, append: false, mode: 0o644 }
     }
     pub fn read(&mut self, yes: bool) -> &mut Self { self.read = yes; self }
     pub fn write(&mut self, yes: bool) -> &mut Self { self.write = yes; self }
     pub fn create(&mut self, yes: bool) -> &mut Self { self.create = yes; self }
+    pub fn create_new(&mut self, yes: bool) -> &mut Self { self.create_new = yes; self }
     pub fn truncate(&mut self, yes: bool) -> &mut Self { self.truncate = yes; self }
     pub fn append(&mut self, yes: bool) -> &mut Self { self.append = yes; self }
     pub fn mode(&mut self, mode: u32) -> &mut Self { self.mode = mode; self }
-    pub fn open(&self, path: &super::path::Path) -> super::io::Result<File> {
-        let path_str = path.to_str().unwrap_or("");
+    pub fn open<P: AsRef<super::path::Path>>(&self, path: P) -> super::io::Result<File> {
+        let path_str = path.as_ref().to_str().unwrap_or("");
         let mut flags = 0usize;
         if self.read && self.write { flags |= xv8_libc::OpenFlag::READ_WRITE; }
         else if self.write { flags |= xv8_libc::OpenFlag::WRITE_ONLY; }
         else { flags |= xv8_libc::OpenFlag::READ_ONLY; }
-        if self.create { flags |= xv8_libc::OpenFlag::CREATE; }
+        if self.create && self.create_new { return Err(super::io::ErrorKind::AlreadyExists.into()); }
+        if self.create || self.create_new { flags |= xv8_libc::OpenFlag::CREATE; }
         if self.truncate { flags |= xv8_libc::OpenFlag::TRUNCATE; }
         if self.append { flags |= xv8_libc::OpenFlag::APPEND; }
         let fd = xv8_libc::open(path_str.as_ptr(), flags);
@@ -126,21 +154,109 @@ impl Default for OpenOptions {
     fn default() -> Self { Self::new() }
 }
 
+pub fn write<P: AsRef<super::path::Path>, C: AsRef<[u8]>>(path: P, contents: C) -> super::io::Result<()> {
+    use super::io::Write;
+    let mut f = File::create(path)?;
+    f.write_all(contents.as_ref())
+}
+
+pub fn create_dir<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn remove_file<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn remove_dir<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn rename<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(_from: P, _to: Q) -> super::io::Result<()> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn copy<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(_from: P, _to: Q) -> super::io::Result<u64> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn hard_link<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(_from: P, _to: Q) -> super::io::Result<()> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn metadata<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Metadata> {
+    path.as_ref().metadata()
+}
+
+pub fn read_link<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<super::path::PathBuf> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn symlink_metadata<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Metadata> {
+    metadata(path)
+}
+
+pub fn set_permissions<P: AsRef<super::path::Path>>(_path: P, _perm: Permissions) -> super::io::Result<()> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+pub fn create_dir_all<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
+    Err(super::io::ErrorKind::Unsupported.into())
+}
+
+#[derive(Clone, Copy)]
+pub enum FileType {
+    RegularFile,
+    Directory,
+    Symlink,
+    Other,
+}
+
+impl FileType {
+    pub fn is_dir(&self) -> bool { matches!(self, FileType::Directory) }
+    pub fn is_file(&self) -> bool { matches!(self, FileType::RegularFile) }
+    pub fn is_symlink(&self) -> bool { matches!(self, FileType::Symlink) }
+}
+
 pub struct ReadDir { _path: String, _offset: usize }
-pub struct DirEntry { _name: String, _metadata: Metadata }
+pub struct DirEntry { _name: String, _metadata: Option<Metadata> }
+
+impl DirEntry {
+    pub fn path(&self) -> super::path::PathBuf {
+        super::path::PathBuf::from(self._name.as_bytes())
+    }
+    pub fn file_name(&self) -> &super::ffi::OsStr {
+        super::ffi::OsStr::from_str(&self._name)
+    }
+    pub fn metadata(&self) -> super::io::Result<Metadata> {
+        self._metadata.clone().ok_or(super::io::ErrorKind::Other.into())
+    }
+    pub fn file_type(&self) -> super::io::Result<super::fs::FileType> {
+        Ok(super::fs::FileType::RegularFile)
+    }
+}
 
 impl Iterator for ReadDir {
     type Item = super::io::Result<DirEntry>;
     fn next(&mut self) -> Option<Self::Item> { None }
 }
 
-pub fn read_to_string(path: &super::path::Path) -> super::io::Result<String> {
+pub fn read<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<alloc::vec::Vec<u8>> {
+    let mut file = File::open(path)?;
+    let size = file.metadata()?.len() as usize;
+    let mut buf = alloc::vec::Vec::with_capacity(size);
+    buf.resize(size, 0);
+    file.read_raw(&mut buf)?;
+    Ok(buf)
+}
+
+pub fn read_to_string<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<String> {
     let mut file = File::open(path)?;
     let mut s = String::new();
     file.read_to_string(&mut s)?;
     Ok(s)
 }
 
-pub fn read_dir(path: &super::path::Path) -> super::io::Result<ReadDir> {
-    Ok(ReadDir { _path: path.to_str().unwrap_or("").to_string(), _offset: 0 })
+pub fn read_dir<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<ReadDir> {
+    Ok(ReadDir { _path: path.as_ref().to_str().unwrap_or("").to_string(), _offset: 0 })
 }
