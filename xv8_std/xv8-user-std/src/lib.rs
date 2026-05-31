@@ -95,6 +95,10 @@ pub mod slice {
     pub use core::slice::*;
 }
 
+pub mod ptr {
+    pub use core::ptr::*;
+}
+
 pub mod iter {
     pub use core::iter::*;
 }

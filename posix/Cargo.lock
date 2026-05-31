@@ -41,13 +41,20 @@ checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 name = "tools"
 version = "0.1.0"
 dependencies = [
- "libc",
+ "xv8-libc-compat",
  "xv8-user-std",
 ]
 
 [[package]]
 name = "xv8-libc"
 version = "0.1.0"
+
+[[package]]
+name = "xv8-libc-compat"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "xv8-user-std"

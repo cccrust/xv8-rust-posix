@@ -3,8 +3,8 @@ name = "tools"
 version = "0.1.0"
 edition = "2021"
 
-[target.'cfg(not(target_arch = "riscv64"))'.dependencies]
-libc = "0.2"
+[dependencies]
+libc = { package = "xv8-libc-compat", path = "../../xv8_std/xv8-libc-compat" }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 std = { package = "xv8-user-std", path = "../../xv8_std/xv8-user-std" }

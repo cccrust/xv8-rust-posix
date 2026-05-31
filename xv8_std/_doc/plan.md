@@ -68,23 +68,24 @@ build-std = ["core", "compiler_builtins", "alloc"]
 - 額外：HashMap/HashSet (via hashbrown), char/iter/error modules
 - 工具修正：date.rs (i64→i32), who.rs (補 cfg(not(unix)) fallback)
 
-### v0.4（規劃中）
-- 補 libc 替代 syscall（signals, utsname），攻克 10 個 libc 依賴工具
-- 實作 fs::read_link, process::spawn 的真實 syscall
-- QEMU 測試 Phase 1 工具
-- clock_gettime syscall
+### v0.4（已完成）
+- 補 `xv8-libc-compat`：在 riscv64 提供最小 `libc` 相容層，攻克 10 個 libc 依賴工具
+- 對齊 `utsname`、`termios`、`winsize`、`passwd`、`group`、`shmid_ds`、`semid_ds` 等 ABI
+- 補 `kill`、`waitpid`、`uname`、`mkfifo`、`setuid`、`setregid`、`tcgetattr`、`tcsetattr`、`ioctl`、`sysconf`
+- `posix/tools` 目標平台編譯驗證通過：135/135
+- `ipcrm` 補齊 `null_mut::<c_void>()` 型別註記，避免泛型指標推導失敗
 
 ## 當前狀態
 
 | 類別 | 數量 |
 |---|---|
 | 工具總數 | 135 |
-| 編譯成功 | 125 |
-| libc 依賴失敗 | 10 (bg, fg, ipcrm, ipcs, jobs, mkfifo, newgrp, su, uname, vi) |
+| 編譯成功 | 135 |
+| libc 依賴失敗 | 0 |
 
 ## 限制
 
 - 第三方 crates（如 `regex`）仍然依賴編譯器內建 `std`，無法使用
 - 只有直接使用 `std::*` 的程式碼能被 overlay 取代
-- 10 個工具使用 `libc` crate 直接呼叫系統 API，需補 wrapper
+- `libc` 相關 API 在 riscv64 由 `xv8-libc-compat` 提供最小相容層；部分函式仍是 stub，僅保證編譯
 - 許多 stub 回傳 `Unsupported`，執行時期會失敗

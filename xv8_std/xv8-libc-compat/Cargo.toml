@@ -1,0 +1,7 @@
+[package]
+name = "xv8-libc-compat"
+version = "0.1.0"
+edition = "2021"
+
+[target.'cfg(not(target_arch = "riscv64"))'.dependencies]
+real_libc = { package = "libc", version = "0.2" }

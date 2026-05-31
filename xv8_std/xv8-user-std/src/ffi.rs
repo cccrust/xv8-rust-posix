@@ -58,9 +58,9 @@ pub struct CStr {
 }
 
 impl CStr {
-    pub unsafe fn from_ptr<'a>(ptr: *const u8) -> &'a CStr {
-        let len = xv8_libc::strlen(ptr);
-        &*(core::slice::from_raw_parts(ptr, len + 1) as *const [u8] as *const CStr)
+    pub unsafe fn from_ptr<'a>(ptr: *const i8) -> &'a CStr {
+        let len = xv8_libc::strlen(ptr as *const u8);
+        &*(core::slice::from_raw_parts(ptr as *const u8, len + 1) as *const [u8] as *const CStr)
     }
     pub fn to_bytes(&self) -> &[u8] {
         &self.inner[..self.inner.len() - 1]
@@ -90,8 +90,8 @@ impl CString {
     pub fn as_c_str(&self) -> &CStr {
         unsafe { &*(self.inner.as_slice() as *const [u8] as *const CStr) }
     }
-    pub fn as_ptr(&self) -> *const u8 {
-        self.inner.as_ptr()
+    pub fn as_ptr(&self) -> *const i8 {
+        self.inner.as_ptr() as *const i8
     }
 }
 
