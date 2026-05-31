@@ -5,6 +5,7 @@ use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::error::KernelError;
 use crate::exec::exec;
@@ -400,6 +401,8 @@ pub struct ProcData {
     pub ngroups: usize,
     /// Signal action table
     pub sigactions: [signal::SigAction; signal::SIGNAL_MAX],
+    /// Environment variables (KEY=VALUE entries)
+    pub env: Vec<String>,
     /// Next mmap address (grows downward from MMAP_BASE)
     pub mmap_next: VA,
 }
@@ -429,6 +432,7 @@ impl ProcData {
             groups: [0u32; 16],
             ngroups: 0,
             sigactions: [signal::SigAction { handler: 0, flags: 0, mask: 0 }; signal::SIGNAL_MAX],
+            env: Vec::new(),
             mmap_next: VA::new(crate::param::MMAP_BASE),
         }
     }
@@ -891,6 +895,9 @@ pub fn fork() -> Result<Pid, KernelError> {
 
     // child inherits signal actions
     new_data.sigactions = data.sigactions;
+
+    // child inherits environment variables
+    new_data.env = data.env.clone();
 
     // child gets its own mmap region (not inherited)
     new_data.mmap_next = VA::new(crate::param::MMAP_BASE);

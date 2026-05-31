@@ -72,8 +72,13 @@
 | sigsuspend | ✓ | POSIX 標準 (v0.14) |
 | sigreturn | ✓ | POSIX 標準 (v0.14) |
 | killpg | ✓ | POSIX 標準 (v0.14) |
+| getenv | ✓ | POSIX 標準 (v0.15) |
+| setenv | ✓ | POSIX 標準 (v0.15) |
+| unsetenv | ✓ | POSIX 標準 (v0.15) |
+| clearenv | ✓ | POSIX 標準 (v0.15) |
+| getpagesize | ✓ | POSIX 標準 (v0.15) |
 
-## OpenFlag POSIX 標準值
+## OpenFlag POSIX 標準値
 
 ```rust
 // 已修正為 POSIX 標準:

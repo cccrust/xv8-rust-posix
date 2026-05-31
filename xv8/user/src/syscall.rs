@@ -309,6 +309,26 @@ pub mod raw {
         syscall2(Syscall::Killpg, pgrp, sig)
     }
 
+    pub fn getenv(name: *const u8, buf: *mut u8, len: usize) -> isize {
+        syscall3(Syscall::Getenv, name as usize, buf as usize, len)
+    }
+
+    pub fn setenv(name: *const u8, value: *const u8, overwrite: isize) -> isize {
+        syscall3(Syscall::Setenv, name as usize, value as usize, overwrite as usize)
+    }
+
+    pub fn unsetenv(name: *const u8) -> isize {
+        syscall1(Syscall::Unsetenv, name as usize)
+    }
+
+    pub fn clearenv() -> isize {
+        syscall0(Syscall::Clearenv)
+    }
+
+    pub fn getpagesize() -> isize {
+        syscall0(Syscall::Getpagesize)
+    }
+
     pub fn getpgid(pid: usize) -> isize {
         syscall1(Syscall::Getpgid, pid)
     }
@@ -774,4 +794,41 @@ pub fn sigreturn(ctx: *const u8) -> ! {
 
 pub fn killpg(pgrp: usize, sig: usize) -> Result<(), SysError> {
     check_unit(raw::killpg(pgrp, sig))
+}
+
+fn validate_env_name(name: &str) -> Result<[u8; 256], SysError> {
+    if name.is_empty() || name.len() >= 256 || name.bytes().any(|b| b == 0) {
+        return Err(SysError::InvalidArgument);
+    }
+    let mut buf = [0u8; 256];
+    buf[..name.len()].copy_from_slice(name.as_bytes());
+    Ok(buf)
+}
+
+pub fn getenv(name: &str, buf: &mut [u8]) -> Result<usize, SysError> {
+    let cname = validate_env_name(name)?;
+    check(raw::getenv(cname.as_ptr(), buf.as_mut_ptr(), buf.len()))
+}
+
+pub fn setenv(name: &str, value: &str, overwrite: bool) -> Result<(), SysError> {
+    let cname = validate_env_name(name)?;
+    if value.len() >= 256 || value.bytes().any(|b| b == 0) {
+        return Err(SysError::InvalidArgument);
+    }
+    let mut cvalue = [0u8; 256];
+    cvalue[..value.len()].copy_from_slice(value.as_bytes());
+    check_unit(raw::setenv(cname.as_ptr(), cvalue.as_ptr(), overwrite as isize))
+}
+
+pub fn unsetenv(name: &str) -> Result<(), SysError> {
+    let cname = validate_env_name(name)?;
+    check_unit(raw::unsetenv(cname.as_ptr()))
+}
+
+pub fn clearenv() -> Result<(), SysError> {
+    check_unit(raw::clearenv())
+}
+
+pub fn getpagesize() -> usize {
+    raw::getpagesize() as usize
 }

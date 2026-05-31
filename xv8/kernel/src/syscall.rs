@@ -354,6 +354,11 @@ pub enum Syscall {
     Sigsuspend = 100,
     Sigreturn = 101,
     Killpg = 102,
+    Getenv = 103,
+    Setenv = 104,
+    Unsetenv = 105,
+    Clearenv = 106,
+    Getpagesize = 107,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -462,6 +467,11 @@ impl TryFrom<usize> for Syscall {
             100 => Ok(Syscall::Sigsuspend),
             101 => Ok(Syscall::Sigreturn),
             102 => Ok(Syscall::Killpg),
+            103 => Ok(Syscall::Getenv),
+            104 => Ok(Syscall::Setenv),
+            105 => Ok(Syscall::Unsetenv),
+            106 => Ok(Syscall::Clearenv),
+            107 => Ok(Syscall::Getpagesize),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -578,6 +588,11 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Sigsuspend => sys_sigsuspend(&args),
             Syscall::Sigreturn => sys_sigreturn(&args),
             Syscall::Killpg => sys_killpg(&args),
+            Syscall::Getenv => sys_getenv(&args),
+            Syscall::Setenv => sys_setenv(&args),
+            Syscall::Unsetenv => sys_unsetenv(&args),
+            Syscall::Clearenv => sys_clearenv(&args),
+            Syscall::Getpagesize => sys_getpagesize(&args),
         },
         Err(e) => Err(e),
     };

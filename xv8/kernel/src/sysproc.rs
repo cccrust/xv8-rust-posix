@@ -1,4 +1,6 @@
+use alloc::string::String;
 use alloc::vec;
+use alloc::vec::Vec;
 
 use crate::memlayout::QEMU_POWER;
 use crate::param::MMAP_BASE;
@@ -1068,4 +1070,86 @@ pub fn sys_killpg(args: &SyscallArgs) -> Result<usize, SysError> {
     } else {
         err!(SysError::NoProcess)
     }
+}
+
+fn env_find(env: &[String], name: &str) -> Option<usize> {
+    let prefix = [name, "="].concat();
+    let prefix_bytes = prefix.as_bytes();
+    env.iter().position(|s| s.as_bytes().starts_with(prefix_bytes))
+}
+
+pub fn sys_getenv(args: &SyscallArgs) -> Result<usize, SysError> {
+    let name = try_log!(args.fetch_string(args.get_addr(0), 256));
+    let buf_addr = args.get_addr(1);
+    let buf_len = args.get_int(2) as usize;
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let value_bytes = {
+        let idx = env_find(&data.env, &name);
+        let mut buf = Vec::new();
+        if let Some(idx) = idx {
+            if let Some(entry) = data.env.get(idx) {
+                if let Some(eq_pos) = entry.find('=') {
+                    buf.extend_from_slice(entry[eq_pos + 1..].as_bytes());
+                }
+            }
+        }
+        buf
+    };
+    if !value_bytes.is_empty() {
+        let len = value_bytes.len().min(buf_len);
+        if len > 0 {
+            data.pagetable_mut()
+                .copy_to(&value_bytes[..len], buf_addr)
+                .map_err(|_| SysError::BadAddress)?;
+        }
+        return Ok(len);
+    }
+    err!(SysError::NoProcess)
+}
+
+pub fn sys_setenv(args: &SyscallArgs) -> Result<usize, SysError> {
+    let name = try_log!(args.fetch_string(args.get_addr(0), 256));
+    let value = try_log!(args.fetch_string(args.get_addr(1), 256));
+    let overwrite = args.get_int(2);
+
+    if name.is_empty() || name.contains('=') {
+        err!(SysError::InvalidArgument)
+    }
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let entry = [name.as_str(), "=", value.as_str()].concat();
+
+    if let Some(idx) = env_find(&data.env, &name) {
+        if overwrite != 0 {
+            data.env[idx] = entry;
+        }
+    } else {
+        data.env.push(entry);
+    }
+    Ok(0)
+}
+
+pub fn sys_unsetenv(args: &SyscallArgs) -> Result<usize, SysError> {
+    let name = try_log!(args.fetch_string(args.get_addr(0), 256));
+
+    if name.is_empty() || name.contains('=') {
+        err!(SysError::InvalidArgument)
+    }
+
+    let (_proc, data) = current_proc_and_data_mut();
+    if let Some(idx) = env_find(&data.env, &name) {
+        data.env.remove(idx);
+    }
+    Ok(0)
+}
+
+pub fn sys_clearenv(_args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_proc, data) = current_proc_and_data_mut();
+    data.env.clear();
+    Ok(0)
+}
+
+pub fn sys_getpagesize(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Ok(crate::riscv::PGSIZE)
 }
