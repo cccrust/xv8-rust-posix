@@ -273,6 +273,18 @@ pub mod raw {
         syscall1(Syscall::Setgid, gid)
     }
 
+    pub fn setgroups(size: usize, list: *const u32) -> isize {
+        syscall2(Syscall::Setgroups, size, list as usize)
+    }
+
+    pub fn getgroups(size: usize, list: *mut u32) -> isize {
+        syscall2(Syscall::Getgroups, size, list as usize)
+    }
+
+    pub fn initgroups(user: *const u8, group: u32) -> isize {
+        syscall2(Syscall::Initgroups, user as usize, group as usize)
+    }
+
     pub fn getpgid(pid: usize) -> isize {
         syscall1(Syscall::Getpgid, pid)
     }
@@ -688,4 +700,21 @@ pub fn pipe2(flags: usize) -> Result<(Fd, Fd), SysError> {
     let mut fds = [0usize; 2];
     check_unit(raw::pipe2(fds.as_mut_ptr(), flags))?;
     Ok((Fd(fds[0]), Fd(fds[1])))
+}
+
+pub fn setgroups(groups: &[u32]) -> Result<(), SysError> {
+    check_unit(raw::setgroups(groups.len(), groups.as_ptr()))
+}
+
+pub fn getgroups(groups: &mut [u32]) -> Result<usize, SysError> {
+    check(raw::getgroups(groups.len(), groups.as_mut_ptr()))
+}
+
+pub fn initgroups(user: &str, group: u32) -> Result<(), SysError> {
+    if user.len() >= 256 || user.bytes().any(|b| b == 0) {
+        return Err(SysError::NameTooLong);
+    }
+    let mut buf = [0u8; 256];
+    buf[..user.len()].copy_from_slice(user.as_bytes());
+    check_unit(raw::initgroups(buf.as_ptr(), group))
 }

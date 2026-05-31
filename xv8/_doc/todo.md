@@ -1,25 +1,10 @@
 # xv8 POSIX System Call 實作規劃
 
-## 目前狀態 (v0.12)
+## 目前狀態 (v0.13)
 
-已完成 v0.5~v0.12，已實作 **93 個** system calls。
+已完成 v0.5~v0.13，已實作 **96 個** system calls。
 
-## 待實作項目
-
-### v0.9 - 程序群組與 session
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| setpgid | 75 | 設定程序群組（跨程序） |
-| getsid | 76 | 取得 session ID |
-| setreuid | 77 | 設定真實/有效 UID |
-| setregid | 78 | 設定真實/有效 GID |
-| setresuid | 79 | 設定真實/有效/儲存 UID |
-| setresgid | 80 | 設定真實/有效/儲存 GID |
-| getresuid | 81 | 取得真實/有效/儲存 UID |
-| getresgid | 82 | 取得真實/有效/儲存 GID |
-
-### v0.13 - 群組管理
+### v0.14 - 檔案鎖定
 
 | syscall | 編號 | 說明 |
 |---------|------|------|

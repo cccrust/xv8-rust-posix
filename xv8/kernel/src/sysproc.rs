@@ -791,6 +791,58 @@ pub fn sys_sysconf(args: &SyscallArgs) -> Result<usize, SysError> {
     }
 }
 
+pub fn sys_setgroups(args: &SyscallArgs) -> Result<usize, SysError> {
+    let size = args.get_int(1) as usize;
+    if size > 16 {
+        err!(SysError::InvalidArgument)
+    }
+    let list_addr = args.get_addr(0);
+    let (_proc, data) = current_proc_and_data_mut();
+    if size > 0 {
+        let mut groups = [0u32; 16];
+        for i in 0..size {
+            let addr = VA::new(list_addr.as_usize() + i * 4);
+            let mut buf = [0u8; 4];
+            data.pagetable_mut()
+                .copy_from(addr, &mut buf)
+                .map_err(|_| SysError::BadAddress)?;
+            groups[i] = u32::from_ne_bytes(buf);
+        }
+        data.groups = groups;
+    }
+    data.ngroups = size;
+    Ok(0)
+}
+
+pub fn sys_getgroups(args: &SyscallArgs) -> Result<usize, SysError> {
+    let size = args.get_int(0) as usize;
+    let list_addr = args.get_addr(1);
+    let (_proc, data) = current_proc_and_data_mut();
+    if list_addr.as_usize() == 0 {
+        return Ok(data.ngroups);
+    }
+    if size < data.ngroups {
+        err!(SysError::InvalidArgument)
+    }
+    for i in 0..data.ngroups {
+        let addr = VA::new(list_addr.as_usize() + i * 4);
+        let buf = data.groups[i].to_ne_bytes();
+        data.pagetable_mut()
+            .copy_to(&buf, addr)
+            .map_err(|_| SysError::BadAddress)?;
+    }
+    Ok(data.ngroups)
+}
+
+pub fn sys_initgroups(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _name = try_log!(args.fetch_string(args.get_addr(0), 256));
+    let group = args.get_int(1) as u32;
+    let (_proc, data) = current_proc_and_data_mut();
+    data.groups[0] = group;
+    data.ngroups = 1;
+    Ok(0)
+}
+
 pub fn sys_confstr(args: &SyscallArgs) -> Result<usize, SysError> {
     let name = args.get_int(0) as usize;
     let buf_addr = args.get_addr(1);

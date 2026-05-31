@@ -63,6 +63,9 @@
 | fpathconf | ✓ | POSIX 標準 (v0.12) |
 | sysconf | ✓ | POSIX 標準 (v0.12) |
 | confstr | ✓ | POSIX 標準 (v0.12) |
+| setgroups | ✓ | POSIX 標準 (v0.13) |
+| getgroups | ✓ | POSIX 標準 (v0.13) |
+| initgroups | ✓ | POSIX 標準 (v0.13) |
 
 ## OpenFlag POSIX 標準值
 

@@ -345,6 +345,9 @@ pub enum Syscall {
     Fpathconf = 91,
     Sysconf = 92,
     Confstr = 93,
+    Setgroups = 94,
+    Getgroups = 95,
+    Initgroups = 96,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -444,6 +447,9 @@ impl TryFrom<usize> for Syscall {
             91 => Ok(Syscall::Fpathconf),
             92 => Ok(Syscall::Sysconf),
             93 => Ok(Syscall::Confstr),
+            94 => Ok(Syscall::Setgroups),
+            95 => Ok(Syscall::Getgroups),
+            96 => Ok(Syscall::Initgroups),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -551,6 +557,9 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Fpathconf => sys_fpathconf(&args),
             Syscall::Sysconf => sys_sysconf(&args),
             Syscall::Confstr => sys_confstr(&args),
+            Syscall::Setgroups => sys_setgroups(&args),
+            Syscall::Getgroups => sys_getgroups(&args),
+            Syscall::Initgroups => sys_initgroups(&args),
         },
         Err(e) => Err(e),
     };
