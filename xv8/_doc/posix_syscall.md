@@ -1,6 +1,6 @@
 # xv8 POSIX System Call 支援分析
 
-## 已實作的 System Calls (44 個)
+## 已實作的 System Calls (52 個)
 
 | syscall | 狀態 | 說明 |
 |---------|------|------|

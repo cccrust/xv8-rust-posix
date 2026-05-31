@@ -501,3 +501,129 @@ pub fn sys_clock_settime(args: &SyscallArgs) -> Result<usize, SysError> {
     let _ts_addr = args.get_addr(1);
     Ok(0)
 }
+
+pub fn sys_getsid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let pid = args.get_int(0) as usize;
+
+    if pid == 0 {
+        let current_pid = *args.proc().inner.lock().pid;
+        return Ok(current_pid);
+    }
+
+    // simplified: return the given pid as its own session ID
+    Ok(pid)
+}
+
+pub fn sys_setreuid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let ruid = args.get_int(0) as u32;
+    let euid = args.get_int(1) as u32;
+
+    let (_, data) = current_proc_and_data_mut();
+
+    if ruid != u32::MAX {
+        data.uid = ruid;
+    }
+    if euid != u32::MAX {
+        data.euid = euid;
+        data.suid = euid;
+    }
+
+    Ok(0)
+}
+
+pub fn sys_setregid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let rgid = args.get_int(0) as u32;
+    let egid = args.get_int(1) as u32;
+
+    let (_, data) = current_proc_and_data_mut();
+
+    if rgid != u32::MAX {
+        data.gid = rgid;
+    }
+    if egid != u32::MAX {
+        data.egid = egid;
+        data.sgid = egid;
+    }
+
+    Ok(0)
+}
+
+pub fn sys_setresuid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let ruid = args.get_int(0) as u32;
+    let euid = args.get_int(1) as u32;
+    let suid = args.get_int(2) as u32;
+
+    let (_, data) = current_proc_and_data_mut();
+
+    if ruid != u32::MAX {
+        data.uid = ruid;
+    }
+    if euid != u32::MAX {
+        data.euid = euid;
+    }
+    if suid != u32::MAX {
+        data.suid = suid;
+    }
+
+    Ok(0)
+}
+
+pub fn sys_setresgid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let rgid = args.get_int(0) as u32;
+    let egid = args.get_int(1) as u32;
+    let sgid = args.get_int(2) as u32;
+
+    let (_, data) = current_proc_and_data_mut();
+
+    if rgid != u32::MAX {
+        data.gid = rgid;
+    }
+    if egid != u32::MAX {
+        data.egid = egid;
+    }
+    if sgid != u32::MAX {
+        data.sgid = sgid;
+    }
+
+    Ok(0)
+}
+
+pub fn sys_getresuid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let addr = args.get_addr(0);
+
+    let (_, data) = current_proc_and_data_mut();
+
+    let ruid = data.uid;
+    let euid = data.euid;
+    let suid = data.suid;
+
+    let buf = [
+        ruid.to_le_bytes(),
+        euid.to_le_bytes(),
+        suid.to_le_bytes(),
+    ].concat();
+
+    data.pagetable_mut().copy_to(&buf, addr).map_err(|_| SysError::BadAddress)?;
+
+    Ok(0)
+}
+
+pub fn sys_getresgid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let addr = args.get_addr(0);
+
+    let (_, data) = current_proc_and_data_mut();
+
+    let rgid = data.gid;
+    let egid = data.egid;
+    let sgid = data.sgid;
+
+    let buf = [
+        rgid.to_le_bytes(),
+        egid.to_le_bytes(),
+        sgid.to_le_bytes(),
+    ].concat();
+
+    data.pagetable_mut().copy_to(&buf, addr).map_err(|_| SysError::BadAddress)?;
+
+    Ok(0)
+}

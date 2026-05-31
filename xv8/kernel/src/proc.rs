@@ -386,6 +386,14 @@ pub struct ProcData {
     pub uid: u32,
     /// Real group ID
     pub gid: u32,
+    /// Effective user ID
+    pub euid: u32,
+    /// Effective group ID
+    pub egid: u32,
+    /// Saved user ID
+    pub suid: u32,
+    /// Saved group ID
+    pub sgid: u32,
     /// Next mmap address (grows downward from MMAP_BASE)
     pub mmap_next: VA,
 }
@@ -408,6 +416,10 @@ impl ProcData {
             stime: 0,
             uid: 0,
             gid: 0,
+            euid: 0,
+            egid: 0,
+            suid: 0,
+            sgid: 0,
             mmap_next: VA::new(crate::param::MMAP_BASE),
         }
     }
@@ -855,6 +867,14 @@ pub fn fork() -> Result<Pid, KernelError> {
 
     // child inherits parent's process group
     new_data.pgrp = data.pgrp;
+
+    // child inherits parent's credentials
+    new_data.uid = data.uid;
+    new_data.gid = data.gid;
+    new_data.euid = data.euid;
+    new_data.egid = data.egid;
+    new_data.suid = data.suid;
+    new_data.sgid = data.sgid;
 
     // child gets its own mmap region (not inherited)
     new_data.mmap_next = VA::new(crate::param::MMAP_BASE);

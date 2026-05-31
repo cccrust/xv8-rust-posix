@@ -110,7 +110,7 @@ cargo run --release
 - **Boot**: Entry at 0x80000000, machine-mode start, supervisor-mode init
 - **Memory**: Buddy allocator, Sv39 paging, lazy allocation, COW fork
 - **Processes**: 64 process slots, round-robin scheduler, sleep/wakeup, process groups
-- **Syscalls**: 74 syscalls including readv, writev, pread, pwrite, time, nanosleep, clock_gettime, mmap, munmap, mprotect, dup2, getppid, setuid, setgid, getpgid, isatty, etc.
+- **Syscalls**: 82 syscalls including setpgid, getsid, setreuid, setregid, setresuid, setresgid, getresuid, getresgid, readv, writev, pread, pwrite, time, nanosleep, clock_gettime, mmap, munmap, mprotect, dup2, getppid, setuid, setgid, getpgid, isatty, etc.
 - **Syscalls**: fork, exec, wait, exit, open, read, write, pipe, socket, etc.
 - **Filesystem**: Log-structured with write-ahead logging, inode-based
 - **Networking**: Ethernet, ARP, IPv4, UDP, DHCP, loopback
