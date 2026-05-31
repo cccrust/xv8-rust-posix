@@ -1,8 +1,9 @@
 #![no_std]
 
 pub mod raw;
+pub mod args;
 
-pub use raw::{read, write, open, close, lseek, fstat, exit, getpid, Stat};
+pub use raw::{read, write, open, close, lseek, fstat, exit, getpid, chdir, Stat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fd(usize);
@@ -63,4 +64,18 @@ pub fn strlen(s: *const u8) -> usize {
         }
     }
     len
+}
+
+/// POSIX open flags matching the kernel's OpenFlag constants
+pub struct OpenFlag;
+
+impl OpenFlag {
+    pub const READ_ONLY: usize = 0x000;
+    pub const WRITE_ONLY: usize = 0x001;
+    pub const READ_WRITE: usize = 0x002;
+    pub const CREATE: usize = 0x040;
+    pub const EXCLUSIVE: usize = 0x080;
+    pub const TRUNCATE: usize = 0x200;
+    pub const APPEND: usize = 0x400;
+    pub const NON_BLOCK: usize = 0x800;
 }

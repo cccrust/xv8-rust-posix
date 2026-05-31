@@ -1,10 +1,10 @@
-use alloc::string::{String, ToString};
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 pub struct Path { inner: [u8] }
 
 impl Path {
-    pub fn new<S: AsRef<[u8]>>(s: S) -> &Path {
+    pub fn new<S: AsRef<[u8]> + ?Sized>(s: &S) -> &Path {
         Path::from_bytes(s.as_ref())
     }
     pub fn from_bytes(s: &[u8]) -> &Path {
@@ -19,8 +19,7 @@ impl Path {
     }
     pub fn parent(&self) -> Option<&Path> {
         let s = self.to_str()?;
-        s.rfind('/').map(|i| Path::new(&s[..i]));
-        None
+        s.rfind('/').map(|i| Path::new(&s[..i]))
     }
     pub fn is_absolute(&self) -> bool { false }
     pub fn is_relative(&self) -> bool { true }
@@ -29,7 +28,17 @@ impl Path {
     pub fn join(&self, _other: &Path) -> PathBuf { PathBuf { inner: self.inner.as_ref().to_vec() } }
     pub fn to_path_buf(&self) -> PathBuf { PathBuf { inner: self.inner.as_ref().to_vec() } }
     pub fn to_string_lossy(&self) -> alloc::string::String { self.to_str().unwrap_or("?").to_string() }
-    pub fn display(&self) -> DisplayPath { DisplayPath(self) }
+    pub fn display(&self) -> DisplayPath<'_> { DisplayPath(self) }
+    pub fn exists(&self) -> bool {
+        let path_str = self.to_str().unwrap_or("");
+        let fd = xv8_libc::open(path_str.as_ptr(), xv8_libc::OpenFlag::READ_ONLY);
+        if fd >= 0 {
+            xv8_libc::close(fd as usize);
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl core::convert::AsRef<Path> for Path {
@@ -53,6 +62,8 @@ impl PathBuf {
     pub fn pop(&mut self) -> bool { false }
     pub fn set_file_name(&mut self, _name: &str) {}
     pub fn with_extension(&self, _ext: &str) -> Self { self.clone() }
+    pub fn to_str(&self) -> Option<&str> { self.as_path().to_str() }
+    pub fn as_os_str(&self) -> &str { "" }
 }
 
 impl Default for PathBuf {

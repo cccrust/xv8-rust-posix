@@ -10,6 +10,7 @@ pub enum Syscall {
     Fstat = 8,
     Exit = 2,
     Getpid = 11,
+    Chdir = 9,
 }
 
 #[inline(always)]
@@ -87,7 +88,12 @@ pub fn getpid() -> isize {
     syscall1(Syscall::Getpid, 0)
 }
 
+pub fn chdir(path: *const u8) -> isize {
+    syscall1(Syscall::Chdir, path as usize)
+}
+
 #[repr(C)]
+#[derive(Clone, Copy, Default)]
 pub struct Stat {
     pub dev: u64,
     pub ino: u64,

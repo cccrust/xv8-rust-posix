@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-user = { path = "../../xv8/user", package = "user" }
+xv8-libc = { path = "../xv8-libc" }
 
 [features]
 default = []
