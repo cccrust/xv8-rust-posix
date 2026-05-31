@@ -1,23 +1,10 @@
 # xv8 POSIX System Call 實作規劃
 
-## 目前狀態 (v0.4)
+## 目前狀態 (v0.5)
 
-已實作 **54 個** system calls。
+已完成 v0.5，已實作 **62 個** system calls。
 
 ## 待實作項目
-
-### v0.5 - 基礎擴展
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| dup2 | 54 | 複製檔案描述符（指定新fd） |
-| getppid | 55 | 取得父程序 ID |
-| setuid | 56 | 設定程序真實 UID |
-| setgid | 57 | 設定程序真實 GID |
-| getpgid | 58 | 取得程序群組 ID (完整版) |
-| isatty | 59 | 檢查是否為終端 |
-| tcgetattr | 60 | 取得終端屬性 |
-| tcsetattr | 61 | 設定終端屬性 |
 
 ### v0.6 - 記憶體管理
 

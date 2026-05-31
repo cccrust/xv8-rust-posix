@@ -109,7 +109,8 @@ cargo run --release
 
 - **Boot**: Entry at 0x80000000, machine-mode start, supervisor-mode init
 - **Memory**: Buddy allocator, Sv39 paging, lazy allocation, COW fork
-- **Processes**: 64 process slots, round-robin scheduler, sleep/wakeup
+- **Processes**: 64 process slots, round-robin scheduler, sleep/wakeup, process groups
+- **Syscalls**: 62 syscalls including dup2, getppid, setuid, setgid, getpgid, isatty, etc.
 - **Syscalls**: fork, exec, wait, exit, open, read, write, pipe, socket, etc.
 - **Filesystem**: Log-structured with write-ahead logging, inode-based
 - **Networking**: Ethernet, ARP, IPv4, UDP, DHCP, loopback
@@ -132,6 +133,8 @@ cargo run --release
 
 ## Tests
 
-7 internal tests: fs, pipe, proc, fd, sbrk, cow, net
+8 internal tests: fs, pipe, proc, fd, sbrk, cow, net, syscall
+
+- `syscall` test covers: dup2, getppid, setuid, setgid, getpgid, isatty, tcgetattr, tcsetattr
 
 All tests pass successfully.
