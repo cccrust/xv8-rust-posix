@@ -66,6 +66,12 @@
 | setgroups | ✓ | POSIX 標準 (v0.13) |
 | getgroups | ✓ | POSIX 標準 (v0.13) |
 | initgroups | ✓ | POSIX 標準 (v0.13) |
+| sigaction | ✓ | POSIX 標準 (v0.14) |
+| sigprocmask | ✓ | POSIX 標準 (v0.14) |
+| sigpending | ✓ | POSIX 標準 (v0.14) |
+| sigsuspend | ✓ | POSIX 標準 (v0.14) |
+| sigreturn | ✓ | POSIX 標準 (v0.14) |
+| killpg | ✓ | POSIX 標準 (v0.14) |
 
 ## OpenFlag POSIX 標準值
 

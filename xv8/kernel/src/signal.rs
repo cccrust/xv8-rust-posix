@@ -6,6 +6,10 @@ pub const SIGACT: usize = 2;
 
 pub const SIGNAL_MAX: usize = 32;
 
+pub const SIG_BLOCK: i32 = 0;
+pub const SIG_UNBLOCK: i32 = 1;
+pub const SIG_SETMASK: i32 = 2;
+
 pub const SIGALRM: usize = 14;
 pub const SIGVTALRM: usize = 26;
 pub const SIGPROF: usize = 27;
@@ -34,6 +38,51 @@ pub const CLOCK_REALTIME: u32 = 0;
 pub const CLOCK_MONOTONIC: u32 = 1;
 pub const CLOCK_PROCESS_CPUTIME_ID: u32 = 2;
 pub const CLOCK_THREAD_CPUTIME_ID: u32 = 3;
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct SigFrame {
+    pub signo: i32,
+    pub pad: i32,
+    pub epc: u64,
+    pub ra: u64,
+    pub sp: u64,
+    pub gp: u64,
+    pub tp: u64,
+    pub t0: u64,
+    pub t1: u64,
+    pub t2: u64,
+    pub s0: u64,
+    pub s1: u64,
+    pub a0: u64,
+    pub a1: u64,
+    pub a2: u64,
+    pub a3: u64,
+    pub a4: u64,
+    pub a5: u64,
+    pub a6: u64,
+    pub a7: u64,
+    pub s2: u64,
+    pub s3: u64,
+    pub s4: u64,
+    pub s5: u64,
+    pub s6: u64,
+    pub s7: u64,
+    pub s8: u64,
+    pub s9: u64,
+    pub s10: u64,
+    pub s11: u64,
+    pub t3: u64,
+    pub t4: u64,
+    pub t5: u64,
+    pub t6: u64,
+    pub oldmask: u64,
+}
+
+/// Returns the default action for a signal (true = kill, false = ignore).
+pub fn sig_default_action(sig: usize) -> bool {
+    matches!(sig, SIGKILL | SIGSEGV | SIGABRT | SIGQUIT | SIGTERM | SIGINT | SIGHUP | SIGPIPE | SIGALRM | SIGUSR1 | SIGUSR2 | SIGVTALRM | SIGPROF | SIGIO)
+}
 
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C)]

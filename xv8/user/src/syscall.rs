@@ -285,6 +285,30 @@ pub mod raw {
         syscall2(Syscall::Initgroups, user as usize, group as usize)
     }
 
+    pub fn sigaction(sig: usize, act: *const u8, oldact: *mut u8) -> isize {
+        syscall3(Syscall::Sigaction, sig, act as usize, oldact as usize)
+    }
+
+    pub fn sigprocmask(how: i32, set: *const u32, oldset: *mut u32) -> isize {
+        syscall3(Syscall::Sigprocmask, how as usize, set as usize, oldset as usize)
+    }
+
+    pub fn sigpending(set: *mut u32) -> isize {
+        syscall1(Syscall::Sigpending, set as usize)
+    }
+
+    pub fn sigsuspend(mask: *const u32) -> isize {
+        syscall1(Syscall::Sigsuspend, mask as usize)
+    }
+
+    pub fn sigreturn(ctx: *const u8) -> isize {
+        syscall1(Syscall::Sigreturn, ctx as usize)
+    }
+
+    pub fn killpg(pgrp: usize, sig: usize) -> isize {
+        syscall2(Syscall::Killpg, pgrp, sig)
+    }
+
     pub fn getpgid(pid: usize) -> isize {
         syscall1(Syscall::Getpgid, pid)
     }
@@ -717,4 +741,37 @@ pub fn initgroups(user: &str, group: u32) -> Result<(), SysError> {
     let mut buf = [0u8; 256];
     buf[..user.len()].copy_from_slice(user.as_bytes());
     check_unit(raw::initgroups(buf.as_ptr(), group))
+}
+
+pub fn sigaction(sig: usize, act: Option<&kernel::abi::SigAction>,
+                 oldact: Option<&mut kernel::abi::SigAction>) -> Result<(), SysError> {
+    let act_ptr = act.map(|a| a as *const _ as *const u8).unwrap_or(core::ptr::null());
+    let oldact_ptr = oldact.map(|a| a as *mut _ as *mut u8).unwrap_or(core::ptr::null_mut());
+    check_unit(raw::sigaction(sig, act_ptr, oldact_ptr))
+}
+
+pub fn sigprocmask(how: i32, set: Option<u32>) -> Result<u32, SysError> {
+    let mut oldset: u32 = 0;
+    let set_val = set.unwrap_or(0);
+    check(raw::sigprocmask(how, &set_val as *const u32, &mut oldset as *mut u32))?;
+    Ok(oldset)
+}
+
+pub fn sigpending() -> Result<u32, SysError> {
+    let mut set: u32 = 0;
+    check_unit(raw::sigpending(&mut set as *mut u32))?;
+    Ok(set)
+}
+
+pub fn sigsuspend(mask: u32) -> Result<(), SysError> {
+    check_unit(raw::sigsuspend(&mask as *const u32))
+}
+
+pub fn sigreturn(ctx: *const u8) -> ! {
+    raw::sigreturn(ctx);
+    unreachable!()
+}
+
+pub fn killpg(pgrp: usize, sig: usize) -> Result<(), SysError> {
+    check_unit(raw::killpg(pgrp, sig))
 }

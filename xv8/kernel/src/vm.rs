@@ -207,7 +207,7 @@ struct Page([u8; 4096]);
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct PageTableEntry(usize);
+pub(crate) struct PageTableEntry(usize);
 
 impl PageTableEntry {
     /// Check if the PTE is valid.

@@ -1,27 +1,8 @@
 # xv8 POSIX System Call 實作規劃
 
-## 目前狀態 (v0.13)
+## 目前狀態 (v0.14)
 
-已完成 v0.5~v0.13，已實作 **96 個** system calls。
-
-### v0.14 - 檔案鎖定
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| setgroups | 94 | 設定附加群組 |
-| getgroups | 95 | 取得群組列表 |
-| initgroups | 96 | 初始化群組 |
-
-### v0.14 - 信號增強
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| sigaction | 97 | 設定信號處理 |
-| sigprocmask | 98 | 設定信號遮罩 |
-| sigpending | 99 | 取得待處理信號 |
-| sigsuspend | 100 | 原子替換遮罩並等待 |
-| sigreturn | 101 | 從信號處理返回 |
-| killpg | 102 | 發送信號到程序群組 |
+已完成 v0.5~v0.14，已實作 **102 個** system calls。
 
 ### v0.15 - 環境與參數
 

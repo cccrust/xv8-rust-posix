@@ -398,6 +398,8 @@ pub struct ProcData {
     pub groups: [u32; 16],
     /// Number of supplementary groups
     pub ngroups: usize,
+    /// Signal action table
+    pub sigactions: [signal::SigAction; signal::SIGNAL_MAX],
     /// Next mmap address (grows downward from MMAP_BASE)
     pub mmap_next: VA,
 }
@@ -426,6 +428,7 @@ impl ProcData {
             sgid: 0,
             groups: [0u32; 16],
             ngroups: 0,
+            sigactions: [signal::SigAction { handler: 0, flags: 0, mask: 0 }; signal::SIGNAL_MAX],
             mmap_next: VA::new(crate::param::MMAP_BASE),
         }
     }
@@ -885,6 +888,9 @@ pub fn fork() -> Result<Pid, KernelError> {
     // child inherits supplementary groups
     new_data.groups = data.groups;
     new_data.ngroups = data.ngroups;
+
+    // child inherits signal actions
+    new_data.sigactions = data.sigactions;
 
     // child gets its own mmap region (not inherited)
     new_data.mmap_next = VA::new(crate::param::MMAP_BASE);

@@ -862,3 +862,210 @@ pub fn sys_confstr(args: &SyscallArgs) -> Result<usize, SysError> {
         _ => err!(SysError::InvalidArgument),
     }
 }
+
+pub fn sys_sigaction(args: &SyscallArgs) -> Result<usize, SysError> {
+    let sig = args.get_int(0) as usize;
+    let act_addr = args.get_addr(1);
+    let oldact_addr = args.get_addr(2);
+
+    if sig == 0 || sig > signal::SIGNAL_MAX {
+        err!(SysError::InvalidArgument)
+    }
+    if sig == signal::SIGKILL || sig == signal::SIGSTOP {
+        err!(SysError::InvalidArgument)
+    }
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let idx = sig - 1;
+
+    if oldact_addr.as_usize() != 0 {
+        let old = data.sigactions[idx];
+        let mut old_bytes = [0u8; 16];
+        old_bytes[..8].copy_from_slice(&old.handler.to_ne_bytes());
+        old_bytes[8..12].copy_from_slice(&old.flags.to_ne_bytes());
+        old_bytes[12..].copy_from_slice(&old.mask.to_ne_bytes());
+        data.pagetable_mut()
+            .copy_to(&old_bytes, oldact_addr)
+            .map_err(|_| SysError::BadAddress)?;
+    }
+
+    if act_addr.as_usize() != 0 {
+        let mut buf = [0u8; 16];
+        data.pagetable_mut()
+            .copy_from(act_addr, &mut buf)
+            .map_err(|_| SysError::BadAddress)?;
+        let handler = usize::from_ne_bytes(buf[..8].try_into().unwrap());
+        let flags = u32::from_ne_bytes(buf[8..12].try_into().unwrap());
+        let mask = u32::from_ne_bytes(buf[12..16].try_into().unwrap());
+        data.sigactions[idx] = signal::SigAction { handler, flags, mask };
+    }
+
+    Ok(0)
+}
+
+pub fn sys_sigprocmask(args: &SyscallArgs) -> Result<usize, SysError> {
+    let how = args.get_int(0) as i32;
+    let set_addr = args.get_addr(1);
+    let oldset_addr = args.get_addr(2);
+
+    let (_proc, data) = current_proc_and_data_mut();
+
+    if oldset_addr.as_usize() != 0 {
+        let old = data.signals.get_blocked();
+        let buf = old.to_ne_bytes();
+        data.pagetable_mut()
+            .copy_to(&buf, oldset_addr)
+            .map_err(|_| SysError::BadAddress)?;
+    }
+
+    if set_addr.as_usize() != 0 {
+        let mut buf = [0u8; 4];
+        data.pagetable_mut()
+            .copy_from(set_addr, &mut buf)
+            .map_err(|_| SysError::BadAddress)?;
+        let set = u32::from_ne_bytes(buf) as usize;
+
+        let current = data.signals.get_blocked();
+        let new = match how {
+            signal::SIG_BLOCK => current | (set & !((1 << 8) | (1 << 18))),
+            signal::SIG_UNBLOCK => current & !set,
+            signal::SIG_SETMASK => set & !((1 << 8) | (1 << 18)),
+            _ => err!(SysError::InvalidArgument),
+        };
+        data.signals
+            .blocked
+            .store(new, core::sync::atomic::Ordering::Relaxed);
+    }
+
+    Ok(0)
+}
+
+pub fn sys_sigpending(args: &SyscallArgs) -> Result<usize, SysError> {
+    let set_addr = args.get_addr(0);
+    let (_proc, data) = current_proc_and_data_mut();
+    let pending = data.signals.get_pending() as u32;
+    let buf = pending.to_ne_bytes();
+    data.pagetable_mut()
+        .copy_to(&buf, set_addr)
+        .map_err(|_| SysError::BadAddress)?;
+    Ok(0)
+}
+
+pub fn sys_sigsuspend(args: &SyscallArgs) -> Result<usize, SysError> {
+    let mask_addr = args.get_addr(0);
+    let (_proc, data) = current_proc_and_data_mut();
+
+    let mut buf = [0u8; 4];
+    data.pagetable_mut()
+        .copy_from(mask_addr, &mut buf)
+        .map_err(|_| SysError::BadAddress)?;
+    let new_mask = u32::from_ne_bytes(buf) as usize;
+
+    data.signals
+        .blocked
+        .store(new_mask, core::sync::atomic::Ordering::Relaxed);
+    let _ = data;
+    let _ = _proc;
+
+    loop {
+        let proc = current_proc();
+        if proc.is_killed() {
+            return err!(SysError::Interrupted);
+        }
+        let data = unsafe { proc.data_mut() };
+        let pending = data.signals.get_pending();
+        let blocked = data.signals.get_blocked();
+        if pending & !blocked != 0 {
+            return err!(SysError::Interrupted);
+        }
+        let _ = data;
+        proc::r#yield();
+    }
+}
+
+pub fn sys_sigreturn(args: &SyscallArgs) -> Result<usize, SysError> {
+    let frame_addr = args.get_addr(0);
+    let (_proc, data) = current_proc_and_data_mut();
+
+    let mut frame_buf = [0u8; core::mem::size_of::<signal::SigFrame>()];
+    data.pagetable_mut()
+        .copy_from(frame_addr, &mut frame_buf)
+        .map_err(|_| SysError::BadAddress)?;
+
+    let frame: &signal::SigFrame =
+        unsafe { &*(frame_buf.as_ptr() as *const signal::SigFrame) };
+
+    let tf = data.trapframe_mut();
+    tf.epc = frame.epc as usize;
+    tf.ra = frame.ra as usize;
+    tf.sp = frame.sp as usize;
+    tf.gp = frame.gp as usize;
+    tf.tp = frame.tp as usize;
+    tf.t0 = frame.t0 as usize;
+    tf.t1 = frame.t1 as usize;
+    tf.t2 = frame.t2 as usize;
+    tf.s0 = frame.s0 as usize;
+    tf.s1 = frame.s1 as usize;
+    tf.a0 = frame.a0 as usize;
+    tf.a1 = frame.a1 as usize;
+    tf.a2 = frame.a2 as usize;
+    tf.a3 = frame.a3 as usize;
+    tf.a4 = frame.a4 as usize;
+    tf.a5 = frame.a5 as usize;
+    tf.a6 = frame.a6 as usize;
+    tf.a7 = frame.a7 as usize;
+    tf.s2 = frame.s2 as usize;
+    tf.s3 = frame.s3 as usize;
+    tf.s4 = frame.s4 as usize;
+    tf.s5 = frame.s5 as usize;
+    tf.s6 = frame.s6 as usize;
+    tf.s7 = frame.s7 as usize;
+    tf.s8 = frame.s8 as usize;
+    tf.s9 = frame.s9 as usize;
+    tf.s10 = frame.s10 as usize;
+    tf.s11 = frame.s11 as usize;
+    tf.t3 = frame.t3 as usize;
+    tf.t4 = frame.t4 as usize;
+    tf.t5 = frame.t5 as usize;
+    tf.t6 = frame.t6 as usize;
+
+    data.signals
+        .blocked
+        .store(frame.oldmask as usize, core::sync::atomic::Ordering::Relaxed);
+    data.signals
+        .in_handler
+        .store(false, core::sync::atomic::Ordering::Relaxed);
+
+    Ok(frame.a0 as usize)
+}
+
+pub fn sys_killpg(args: &SyscallArgs) -> Result<usize, SysError> {
+    let pgrp = args.get_int(0) as usize;
+    let sig = args.get_int(1) as usize;
+
+    if sig > signal::SIGNAL_MAX {
+        err!(SysError::InvalidArgument)
+    }
+
+    let mut found = false;
+    for p in crate::proc::PROC_TABLE.iter() {
+        let inner = p.inner.lock();
+        if inner.state != crate::proc::ProcState::Unused {
+            if *p.data().pgrp == pgrp {
+                drop(inner);
+                p.data().signals.send_signal(sig);
+                found = true;
+            } else {
+                drop(inner);
+            }
+        } else {
+            drop(inner);
+        }
+    }
+
+    if found {
+        Ok(0)
+    } else {
+        err!(SysError::NoProcess)
+    }
+}

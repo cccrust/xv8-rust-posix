@@ -125,8 +125,147 @@ pub unsafe fn usertrap() {
 /// # Safety
 /// Called from `usertrap()`
 #[unsafe(no_mangle)]
+fn is_fatal_signal(sig: usize) -> bool {
+    matches!(
+        sig,
+        signal::SIGKILL
+            | signal::SIGSEGV
+            | signal::SIGABRT
+            | signal::SIGQUIT
+            | signal::SIGTERM
+            | signal::SIGINT
+            | signal::SIGHUP
+            | signal::SIGPIPE
+            | signal::SIGALRM
+            | signal::SIGUSR1
+            | signal::SIGUSR2
+            | signal::SIGVTALRM
+            | signal::SIGPROF
+            | signal::SIGIO
+    )
+}
+
+/// Deliver pending signals before returning to user space.
+unsafe fn deliver_pending_signals(data: &mut crate::proc::ProcData) {
+    loop {
+        let pending = data.signals.get_pending();
+        let blocked = data.signals.get_blocked();
+        let unblocked = pending & !blocked;
+        if unblocked == 0 {
+            break;
+        }
+        let sig = unblocked.trailing_zeros() as usize + 1;
+        let idx = sig - 1;
+        let act = data.sigactions[idx];
+
+        // Read trapframe registers before any mutable access
+        let (tf_epc, tf_ra, tf_sp, tf_gp, tf_tp, tf_t0, tf_t1, tf_t2, tf_s0, tf_s1,
+             tf_a0, tf_a1, tf_a2, tf_a3, tf_a4, tf_a5, tf_a6, tf_a7,
+             tf_s2, tf_s3, tf_s4, tf_s5, tf_s6, tf_s7, tf_s8, tf_s9, tf_s10, tf_s11,
+             tf_t3, tf_t4, tf_t5, tf_t6) = {
+            let tf = data.trapframe();
+            (tf.epc, tf.ra, tf.sp, tf.gp, tf.tp, tf.t0, tf.t1, tf.t2, tf.s0, tf.s1,
+             tf.a0, tf.a1, tf.a2, tf.a3, tf.a4, tf.a5, tf.a6, tf.a7,
+             tf.s2, tf.s3, tf.s4, tf.s5, tf.s6, tf.s7, tf.s8, tf.s9, tf.s10, tf.s11,
+             tf.t3, tf.t4, tf.t5, tf.t6)
+        };
+
+        data.signals.clear_signal(sig);
+
+        match act.handler {
+            0 => {
+                if sig == signal::SIGSTOP || sig == signal::SIGCONT {
+                    continue;
+                }
+                if is_fatal_signal(sig) {
+                    crate::proc::exit(-(sig as isize));
+                }
+            }
+            1 => {}
+            _ => {
+                let frame_size = core::mem::size_of::<signal::SigFrame>();
+                let frame_va = VA::new(tf_sp - frame_size);
+
+                let oldmask = data.signals.get_blocked();
+                let newmask = oldmask | (act.mask as usize);
+                let extra = if act.flags & signal::SA_NODEFER == 0 {
+                    1 << (sig - 1)
+                } else {
+                    0
+                };
+                data.signals
+                    .blocked
+                    .store(newmask | extra, core::sync::atomic::Ordering::Relaxed);
+
+                let frame = signal::SigFrame {
+                    signo: sig as i32,
+                    pad: 0,
+                    epc: tf_epc as u64,
+                    ra: tf_ra as u64,
+                    sp: tf_sp as u64,
+                    gp: tf_gp as u64,
+                    tp: tf_tp as u64,
+                    t0: tf_t0 as u64,
+                    t1: tf_t1 as u64,
+                    t2: tf_t2 as u64,
+                    s0: tf_s0 as u64,
+                    s1: tf_s1 as u64,
+                    a0: tf_a0 as u64,
+                    a1: tf_a1 as u64,
+                    a2: tf_a2 as u64,
+                    a3: tf_a3 as u64,
+                    a4: tf_a4 as u64,
+                    a5: tf_a5 as u64,
+                    a6: tf_a6 as u64,
+                    a7: tf_a7 as u64,
+                    s2: tf_s2 as u64,
+                    s3: tf_s3 as u64,
+                    s4: tf_s4 as u64,
+                    s5: tf_s5 as u64,
+                    s6: tf_s6 as u64,
+                    s7: tf_s7 as u64,
+                    s8: tf_s8 as u64,
+                    s9: tf_s9 as u64,
+                    s10: tf_s10 as u64,
+                    s11: tf_s11 as u64,
+                    t3: tf_t3 as u64,
+                    t4: tf_t4 as u64,
+                    t5: tf_t5 as u64,
+                    t6: tf_t6 as u64,
+                    oldmask: oldmask as u64,
+                };
+
+                let frame_bytes = unsafe {
+                    core::slice::from_raw_parts(
+                        &frame as *const signal::SigFrame as *const u8,
+                        core::mem::size_of::<signal::SigFrame>(),
+                    )
+                };
+                data.pagetable_mut()
+                    .copy_to(frame_bytes, frame_va)
+                    .unwrap_or(());
+
+                let tf = data.trapframe_mut();
+                tf.epc = act.handler;
+                tf.sp = frame_va.as_usize();
+                tf.ra = 0;
+                tf.a0 = sig;
+                tf.a1 = 0;
+                tf.a2 = frame_va.as_usize();
+                data.signals
+                    .in_handler
+                    .store(true, core::sync::atomic::Ordering::Relaxed);
+                break;
+            }
+        }
+    }
+}
+
 pub unsafe fn usertrapret() {
     let (_proc, data) = proc::current_proc_and_data_mut();
+
+    // Deliver pending signals before returning to user space
+    unsafe { deliver_pending_signals(data); }
 
     // we're about to switch the destination of traps from `kerneltrap()` to `usertrap()`, so turn
     // off interrupts until we're back in user space, where `usertrap()` is correct.

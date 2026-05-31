@@ -1,5 +1,6 @@
 #![no_std]
 #![feature(allocator_api)]
+#![allow(dead_code, unused)]
 
 extern crate alloc;
 

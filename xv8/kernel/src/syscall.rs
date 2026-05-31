@@ -348,6 +348,12 @@ pub enum Syscall {
     Setgroups = 94,
     Getgroups = 95,
     Initgroups = 96,
+    Sigaction = 97,
+    Sigprocmask = 98,
+    Sigpending = 99,
+    Sigsuspend = 100,
+    Sigreturn = 101,
+    Killpg = 102,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -450,6 +456,12 @@ impl TryFrom<usize> for Syscall {
             94 => Ok(Syscall::Setgroups),
             95 => Ok(Syscall::Getgroups),
             96 => Ok(Syscall::Initgroups),
+            97 => Ok(Syscall::Sigaction),
+            98 => Ok(Syscall::Sigprocmask),
+            99 => Ok(Syscall::Sigpending),
+            100 => Ok(Syscall::Sigsuspend),
+            101 => Ok(Syscall::Sigreturn),
+            102 => Ok(Syscall::Killpg),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -560,6 +572,12 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Setgroups => sys_setgroups(&args),
             Syscall::Getgroups => sys_getgroups(&args),
             Syscall::Initgroups => sys_initgroups(&args),
+            Syscall::Sigaction => sys_sigaction(&args),
+            Syscall::Sigprocmask => sys_sigprocmask(&args),
+            Syscall::Sigpending => sys_sigpending(&args),
+            Syscall::Sigsuspend => sys_sigsuspend(&args),
+            Syscall::Sigreturn => sys_sigreturn(&args),
+            Syscall::Killpg => sys_killpg(&args),
         },
         Err(e) => Err(e),
     };
