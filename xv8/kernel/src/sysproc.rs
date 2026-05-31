@@ -627,3 +627,113 @@ pub fn sys_getresgid(args: &SyscallArgs) -> Result<usize, SysError> {
 
     Ok(0)
 }
+
+pub fn sys_ttyname(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_, file) = try_log!(args.get_file(0));
+    let file_inner = crate::file::FILE_TABLE.inner[file.id].lock();
+
+    if let crate::file::FileType::Device { major, .. } = &file_inner.r#type {
+        if *major as usize == crate::file::CONSOLE {
+            let buf_addr = args.get_addr(1);
+            let buf_len = args.get_int(2) as usize;
+            let name = b"/dev/console\0";
+            let len = name.len().min(buf_len);
+            let (_proc, data) = current_proc_and_data_mut();
+            data.pagetable_mut()
+                .copy_to(&name[..len], buf_addr)
+                .map_err(|_| SysError::BadAddress)?;
+            return Ok(len);
+        }
+    }
+
+    err!(SysError::NotATty)
+}
+
+pub fn sys_ttyioctl(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_, file) = try_log!(args.get_file(0));
+    let ioctl_cmd = args.get_int(1) as usize;
+    let ioctl_arg = args.get_int(2) as usize;
+
+    let file_inner = crate::file::FILE_TABLE.inner[file.id].lock();
+
+    if let crate::file::FileType::Device { major, .. } = &file_inner.r#type {
+        if *major as usize == crate::file::CONSOLE {
+            drop(file_inner);
+            return crate::console::Console::ioctl(ioctl_cmd, ioctl_arg);
+        }
+    }
+
+    err!(SysError::NotATty)
+}
+
+pub fn sys_tcgetsid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_, file) = try_log!(args.get_file(0));
+    let file_inner = crate::file::FILE_TABLE.inner[file.id].lock();
+
+    if let crate::file::FileType::Device { major, .. } = &file_inner.r#type {
+        if *major as usize == crate::file::CONSOLE {
+            if let Some(pid) = crate::console::Console::foreground_pid() {
+                return Ok(*pid);
+            }
+            return Ok(0);
+        }
+    }
+
+    err!(SysError::NotATty)
+}
+
+pub fn sys_tcflow(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_proc, file) = try_log!(args.get_file(0));
+    let file_inner = crate::file::FILE_TABLE.inner[file.id].lock();
+
+    if let crate::file::FileType::Device { major, .. } = &file_inner.r#type {
+        if *major as usize == crate::file::CONSOLE {
+            return Ok(0);
+        }
+    }
+
+    err!(SysError::NotATty)
+}
+
+pub fn sys_tcflush(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_proc, file) = try_log!(args.get_file(0));
+    let file_inner = crate::file::FILE_TABLE.inner[file.id].lock();
+
+    if let crate::file::FileType::Device { major, .. } = &file_inner.r#type {
+        if *major as usize == crate::file::CONSOLE {
+            return Ok(0);
+        }
+    }
+
+    err!(SysError::NotATty)
+}

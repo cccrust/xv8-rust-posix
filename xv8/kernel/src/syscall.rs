@@ -43,6 +43,7 @@ pub enum SysError {
     NameTooLong = 36,
     NotImplemented = 38,
     NotEmpty = 39,
+    NotATty = 25,
     MessageTooLarge = 90,
 }
 
@@ -78,6 +79,7 @@ impl SysError {
             32 => Self::BrokenPipe,
             36 => Self::NameTooLong,
             38 => Self::NotImplemented,
+            25 => Self::NotATty,
             39 => Self::NotEmpty,
             90 => Self::MessageTooLarge,
             _ => Self::InvalidArgument,
@@ -112,6 +114,7 @@ impl Display for SysError {
             SysError::NameTooLong => write!(f, "file name too long"),
             SysError::NotImplemented => write!(f, "function not implemented"),
             SysError::NotEmpty => write!(f, "directory not empty"),
+            SysError::NotATty => write!(f, "not a tty"),
             SysError::MessageTooLarge => write!(f, "message too large"),
         }
     }
@@ -333,6 +336,11 @@ pub enum Syscall {
     Getresgid = 82,
     Mkfifo = 83,
     Pipe2 = 84,
+    Ttyname = 85,
+    Ttyioctl = 86,
+    Tcgetsid = 87,
+    Tcflow = 88,
+    Tcflush = 89,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -423,6 +431,11 @@ impl TryFrom<usize> for Syscall {
             82 => Ok(Syscall::Getresgid),
             83 => Ok(Syscall::Mkfifo),
             84 => Ok(Syscall::Pipe2),
+            85 => Ok(Syscall::Ttyname),
+            86 => Ok(Syscall::Ttyioctl),
+            87 => Ok(Syscall::Tcgetsid),
+            88 => Ok(Syscall::Tcflow),
+            89 => Ok(Syscall::Tcflush),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -521,6 +534,11 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Getresgid => sys_getresgid(&args),
             Syscall::Mkfifo => sys_mkfifo(&args),
             Syscall::Pipe2 => sys_pipe2(&args),
+            Syscall::Ttyname => sys_ttyname(&args),
+            Syscall::Ttyioctl => sys_ttyioctl(&args),
+            Syscall::Tcgetsid => sys_tcgetsid(&args),
+            Syscall::Tcflow => sys_tcflow(&args),
+            Syscall::Tcflush => sys_tcflush(&args),
         },
         Err(e) => Err(e),
     };

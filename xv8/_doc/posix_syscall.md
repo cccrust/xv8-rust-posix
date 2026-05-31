@@ -1,6 +1,6 @@
 # xv8 POSIX System Call 支援分析
 
-## 已實作的 System Calls (54 個)
+## 已實作的 System Calls (89 個)
 
 | syscall | 狀態 | 說明 |
 |---------|------|------|
@@ -54,6 +54,11 @@
 | getresgid | ✓ | POSIX 標準 (v0.9) |
 | mkfifo | ✓ | POSIX 標準 (v0.10) |
 | pipe2 | ✓ | POSIX 標準 (v0.10) |
+| ttyname | ✓ | POSIX 標準 (v0.11) |
+| ttyioctl | ✓ | POSIX 標準 (v0.11) |
+| tcgetsid | ✓ | POSIX 標準 (v0.11) |
+| tcflow | ✓ | POSIX 標準 (v0.11) |
+| tcflush | ✓ | POSIX 標準 (v0.11) |
 
 ## OpenFlag POSIX 標準值
 
@@ -93,12 +98,11 @@ pub struct Stat {
 | stat / fstatat | 已有 fstat，stat 可透過路徑實現 |
 | symlink / readlink | 符號連結支援 |
 | utimensat | 改變檔案時間戳 |
-| alarm / setitimer | 鬧鐘/計時器 |
 | mount / umount | 掛載/卸載檔案系統 |
 
 ## 測試狀態
 
-所有 8 個測試通過:
+所有 8 個測試通過 (v0.11):
 - test fs ... ok
 - test pipe ... ok
 - test proc ... ok
@@ -122,4 +126,4 @@ xv8 已支援大多數常用的 POSIX system calls，包括:
 - 系統資訊 (uname)
 - 網路 socket (socket, send, receive)
 - 記憶體 (mmap, munmap, mprotect, sbrk)
-- 終端 (isatty, tcgetattr, tcsetattr)
+- 終端 (isatty, tcgetattr, tcsetattr, ttyname, ttyioctl, tcgetsid, tcflow, tcflush)

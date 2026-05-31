@@ -1,8 +1,8 @@
 # xv8 POSIX System Call 實作規劃
 
-## 目前狀態 (v0.10)
+## 目前狀態 (v0.11)
 
-已完成 v0.5~v0.10，已實作 **84 個** system calls。
+已完成 v0.5~v0.11，已實作 **89 個** system calls。
 
 ## 待實作項目
 
@@ -18,16 +18,6 @@
 | setresgid | 80 | 設定真實/有效/儲存 GID |
 | getresuid | 81 | 取得真實/有效/儲存 UID |
 | getresgid | 82 | 取得真實/有效/儲存 GID |
-
-### v0.11 - TTY 擴展
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| ttyname | 85 | 取得終端名稱 |
-| ttyioctl | 86 | TTY 控制操作 |
-| tcgetsid | 87 | 取得 session ID |
-| tcflow | 88 | 終端流量控制 |
-| tcflush | 89 | 清除終端緩衝 |
 
 ### v0.12 - 路徑與系統配置
 

@@ -235,6 +235,11 @@ impl Console {
         }
     }
 
+    pub fn foreground_pid() -> Option<Pid> {
+        let console = CONSOLE.lock();
+        console.foreground_pid
+    }
+
     pub fn ioctl(cmd: usize, arg: usize) -> Result<usize, SysError> {
         let mut console = CONSOLE.lock();
         match cmd {
