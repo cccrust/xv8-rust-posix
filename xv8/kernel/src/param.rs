@@ -5,7 +5,7 @@ pub const NCPU: usize = 8;
 pub const NPROC: usize = 64;
 
 /// open files per process
-pub const NOFILE: usize = 16;
+pub const NOFILE: usize = 256;
 
 /// open files per system
 pub const NFILE: usize = 100;

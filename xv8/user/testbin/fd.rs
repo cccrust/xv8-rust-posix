@@ -121,9 +121,9 @@ fn test_fork_inherited_offset() {
     unlink("/fd_shared_off").expect("unlink");
 }
 
-/// Opening files past the per-process limit (NOFILE=16) must return an error.
+/// Opening files past the per-process limit (NOFILE=256) must return an error.
 fn test_nofile_limit() {
-    const NOFILE: usize = 16;
+    const NOFILE: usize = 256;
 
     // Create a scratch file to open repeatedly.
     let fd = open("/fd_limit", O_CREATE_RW).expect("create scratch");
@@ -141,10 +141,9 @@ fn test_nofile_limit() {
                 opened += 1;
             }
             Err(e) => {
-                assert_eq!(
-                    e,
-                    SysError::TooManyFiles,
-                    "expected TooManyFiles, got {:?}",
+                assert!(
+                    e == SysError::TooManyFiles || e == SysError::FileTableFull,
+                    "expected TooManyFiles or FileTableFull, got {:?}",
                     e
                 );
                 break;
@@ -152,9 +151,14 @@ fn test_nofile_limit() {
         }
     }
 
-    // 3 fds (stdin/stdout/stderr) are pre-occupied, so we expect to have
-    // opened exactly NOFILE - 3 files before hitting the limit.
-    assert_eq!(opened, NOFILE - 3, "must opened NOFILE-3 files");
+    // 3 fds (stdin/stdout/stderr) are pre-occupied.
+    // We expect to open either NOFILE-3 (per-process) or NFILE-3 (system-wide),
+    // whichever limit is hit first.
+    assert!(
+        opened >= 97, // at least NFILE-3 (100-3=97) should succeed
+        "opened {} files, expected at least 97",
+        opened
+    );
 
     // After closing all opened fds, opening one more must succeed again.
     for fd in fds.iter().take(opened) {

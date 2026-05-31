@@ -214,6 +214,38 @@ pub mod raw {
     pub fn random(buf: *mut u8, len: usize) -> isize {
         syscall2(Syscall::Random, buf as usize, len)
     }
+
+    pub fn dup2(oldfd: usize, newfd: usize) -> isize {
+        syscall2(Syscall::Dup2, oldfd, newfd)
+    }
+
+    pub fn getppid() -> isize {
+        syscall0(Syscall::Getppid)
+    }
+
+    pub fn setuid(uid: usize) -> isize {
+        syscall1(Syscall::Setuid, uid)
+    }
+
+    pub fn setgid(gid: usize) -> isize {
+        syscall1(Syscall::Setgid, gid)
+    }
+
+    pub fn getpgid(pid: usize) -> isize {
+        syscall1(Syscall::Getpgid, pid)
+    }
+
+    pub fn isatty(fd: usize) -> isize {
+        syscall1(Syscall::Isatty, fd)
+    }
+
+    pub fn tcgetattr(fd: usize, addr: usize) -> isize {
+        syscall2(Syscall::Tcgetattr, fd, addr)
+    }
+
+    pub fn tcsetattr(fd: usize, addr: usize, opt: usize) -> isize {
+        syscall3(Syscall::Tcsetattr, fd, addr, opt)
+    }
 }
 
 use kernel::abi::{MAXPATH, Stat, SysError};
@@ -230,6 +262,11 @@ impl Fd {
     /// Returns the raw file descriptor number.
     pub fn as_raw(&self) -> usize {
         self.0
+    }
+
+    /// Creates a new Fd from a raw file descriptor number.
+    pub fn from_raw(raw: usize) -> Self {
+        Fd(raw)
     }
 }
 
@@ -452,4 +489,36 @@ pub fn receive(
 
 pub fn random(buf: &mut [u8]) -> Result<(), SysError> {
     check_unit(raw::random(buf.as_mut_ptr(), buf.len()))
+}
+
+pub fn dup2(oldfd: Fd, newfd: Fd) -> Result<Fd, SysError> {
+    check(raw::dup2(oldfd.as_raw(), newfd.as_raw())).map(Fd)
+}
+
+pub fn getppid() -> Result<usize, SysError> {
+    check(raw::getppid())
+}
+
+pub fn setuid(uid: u32) -> Result<(), SysError> {
+    check_unit(raw::setuid(uid as usize))
+}
+
+pub fn setgid(gid: u32) -> Result<(), SysError> {
+    check_unit(raw::setgid(gid as usize))
+}
+
+pub fn getpgid(pid: usize) -> Result<usize, SysError> {
+    check(raw::getpgid(pid))
+}
+
+pub fn isatty(fd: Fd) -> Result<bool, SysError> {
+    check(raw::isatty(fd.as_raw())).map(|v| v == 1)
+}
+
+pub fn tcgetattr(_fd: Fd, _attr: &mut [u8]) -> Result<(), SysError> {
+    check_unit(raw::tcgetattr(_fd.as_raw(), _attr.as_mut_ptr() as usize))
+}
+
+pub fn tcsetattr(_fd: Fd, _attr: &[u8], _opt: usize) -> Result<(), SysError> {
+    check_unit(raw::tcsetattr(_fd.as_raw(), _attr.as_ptr() as usize, _opt))
 }

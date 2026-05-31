@@ -355,7 +355,6 @@ impl ProcInner {
 }
 
 /// Private fields for Proc
-#[derive(Debug, Default)]
 pub struct ProcData {
     /// Virtual address of kernel stack
     pub kstack: VA,
@@ -722,6 +721,9 @@ pub fn user_init() {
 
     data.cwd = log!(Path::new("/").resolve()).expect("root path to exist");
 
+    // init's pgrp = init's pid (init is its own process group leader)
+    data.pgrp = inner.pid;
+
     inner.state = ProcState::Runnable;
 
     // inner lock is dropped
@@ -847,6 +849,9 @@ pub fn fork() -> Result<Pid, KernelError> {
     new_data.cwd = data.cwd.dup();
 
     new_data.name = data.name.clone();
+
+    // child inherits parent's process group
+    new_data.pgrp = data.pgrp;
 
     let pid = new_inner.pid;
 

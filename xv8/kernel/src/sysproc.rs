@@ -314,7 +314,14 @@ pub fn sys_getpgid(args: &SyscallArgs) -> Result<usize, SysError> {
         return Ok(*current_proc().data().pgrp);
     }
 
-    let current_id = current_proc().id;
+    let current_proc = current_proc();
+    let current_pid = *current_proc.inner.lock().pid;
+
+    if pid == current_pid {
+        return Ok(*current_proc.data().pgrp);
+    }
+
+    let current_id = current_proc.id;
     let parents = proc::PROC_TABLE.parents.lock();
 
     for p in proc::PROC_TABLE.iter() {
