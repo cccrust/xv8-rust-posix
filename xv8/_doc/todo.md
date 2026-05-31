@@ -1,8 +1,8 @@
 # xv8 POSIX System Call 實作規劃
 
-## 目前狀態 (v0.11)
+## 目前狀態 (v0.12)
 
-已完成 v0.5~v0.11，已實作 **89 個** system calls。
+已完成 v0.5~v0.12，已實作 **93 個** system calls。
 
 ## 待實作項目
 
@@ -18,15 +18,6 @@
 | setresgid | 80 | 設定真實/有效/儲存 GID |
 | getresuid | 81 | 取得真實/有效/儲存 UID |
 | getresgid | 82 | 取得真實/有效/儲存 GID |
-
-### v0.12 - 路徑與系統配置
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| pathconf | 90 | 查詢路徑配置 |
-| fpathconf | 91 | 查詢 fd 配置 |
-| sysconf | 92 | 查詢系統配置 |
-| confstr | 93 | 查詢字串配置 |
 
 ### v0.13 - 群組管理
 

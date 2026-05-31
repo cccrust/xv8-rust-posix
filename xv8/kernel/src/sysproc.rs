@@ -737,3 +737,76 @@ pub fn sys_tcflush(args: &SyscallArgs) -> Result<usize, SysError> {
 
     err!(SysError::NotATty)
 }
+
+pub fn sys_pathconf(args: &SyscallArgs) -> Result<usize, SysError> {
+    let name = args.get_int(1) as usize;
+    let _path = try_log!(args.fetch_string(args.get_addr(0), crate::param::MAXPATH));
+    match name {
+        1 => Ok(65535),   // _PC_LINK_MAX
+        2 => Ok(255),     // _PC_MAX_CANON
+        3 => Ok(255),     // _PC_MAX_INPUT
+        4 => Ok(255),     // _PC_NAME_MAX
+        5 => Ok(4096),    // _PC_PATH_MAX
+        6 => Ok(4096),    // _PC_PIPE_BUF
+        7 => Ok(1),       // _PC_CHOWN_RESTRICTED
+        8 => Ok(1),       // _PC_NO_TRUNC
+        9 => Ok(0),       // _PC_VDISABLE
+        _ => err!(SysError::InvalidArgument),
+    }
+}
+
+pub fn sys_fpathconf(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _fd = args.get_int(0) as usize;
+    let name = args.get_int(1) as usize;
+    match name {
+        1 => Ok(65535),
+        2 => Ok(255),
+        3 => Ok(255),
+        4 => Ok(255),
+        5 => Ok(4096),
+        6 => Ok(4096),
+        7 => Ok(1),
+        8 => Ok(1),
+        9 => Ok(0),
+        _ => err!(SysError::InvalidArgument),
+    }
+}
+
+pub fn sys_sysconf(args: &SyscallArgs) -> Result<usize, SysError> {
+    let name = args.get_int(0) as usize;
+    match name {
+        1 => Ok(131072),  // _SC_ARG_MAX
+        2 => Ok(64),      // _SC_CHILD_MAX
+        3 => Ok(100),     // _SC_CLK_TCK
+        4 => Ok(16),      // _SC_NGROUPS_MAX
+        5 => Ok(256),     // _SC_OPEN_MAX
+        6 => Ok(4096),    // _SC_PAGESIZE
+        7 => Ok(256),     // _SC_STREAM_MAX
+        8 => Ok(6),       // _SC_TZNAME_MAX
+        9 => Ok(1),       // _SC_JOB_CONTROL
+        10 => Ok(1),      // _SC_SAVED_IDS
+        11 => Ok(200809), // _SC_VERSION
+        12 => Ok(64),     // _SC_HOST_NAME_MAX
+        _ => err!(SysError::InvalidArgument),
+    }
+}
+
+pub fn sys_confstr(args: &SyscallArgs) -> Result<usize, SysError> {
+    let name = args.get_int(0) as usize;
+    let buf_addr = args.get_addr(1);
+    let buf_len = args.get_int(2) as usize;
+    match name {
+        1 => {
+            let val = b"/bin:/usr/bin\0";
+            let len = val.len().min(buf_len);
+            if buf_len > 0 && buf_addr.as_usize() != 0 {
+                let (_proc, data) = current_proc_and_data_mut();
+                data.pagetable_mut()
+                    .copy_to(&val[..len], buf_addr)
+                    .map_err(|_| SysError::BadAddress)?;
+            }
+            Ok(val.len())
+        }
+        _ => err!(SysError::InvalidArgument),
+    }
+}

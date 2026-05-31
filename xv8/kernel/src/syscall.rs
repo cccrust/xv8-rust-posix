@@ -341,6 +341,10 @@ pub enum Syscall {
     Tcgetsid = 87,
     Tcflow = 88,
     Tcflush = 89,
+    Pathconf = 90,
+    Fpathconf = 91,
+    Sysconf = 92,
+    Confstr = 93,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -436,6 +440,10 @@ impl TryFrom<usize> for Syscall {
             87 => Ok(Syscall::Tcgetsid),
             88 => Ok(Syscall::Tcflow),
             89 => Ok(Syscall::Tcflush),
+            90 => Ok(Syscall::Pathconf),
+            91 => Ok(Syscall::Fpathconf),
+            92 => Ok(Syscall::Sysconf),
+            93 => Ok(Syscall::Confstr),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -539,6 +547,10 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Tcgetsid => sys_tcgetsid(&args),
             Syscall::Tcflow => sys_tcflow(&args),
             Syscall::Tcflush => sys_tcflush(&args),
+            Syscall::Pathconf => sys_pathconf(&args),
+            Syscall::Fpathconf => sys_fpathconf(&args),
+            Syscall::Sysconf => sys_sysconf(&args),
+            Syscall::Confstr => sys_confstr(&args),
         },
         Err(e) => Err(e),
     };

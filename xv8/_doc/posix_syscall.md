@@ -59,6 +59,10 @@
 | tcgetsid | ✓ | POSIX 標準 (v0.11) |
 | tcflow | ✓ | POSIX 標準 (v0.11) |
 | tcflush | ✓ | POSIX 標準 (v0.11) |
+| pathconf | ✓ | POSIX 標準 (v0.12) |
+| fpathconf | ✓ | POSIX 標準 (v0.12) |
+| sysconf | ✓ | POSIX 標準 (v0.12) |
+| confstr | ✓ | POSIX 標準 (v0.12) |
 
 ## OpenFlag POSIX 標準值
 
