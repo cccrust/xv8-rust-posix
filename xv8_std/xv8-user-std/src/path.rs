@@ -34,7 +34,19 @@ impl Path {
     pub fn as_os_str(&self) -> &str { self.to_str().unwrap_or("") }
     pub fn ends_with(&self, _other: &Path) -> bool { false }
     pub fn starts_with(&self, _other: &Path) -> bool { false }
-    pub fn join<P: AsRef<Path>>(&self, other: P) -> PathBuf { PathBuf { inner: self.inner.as_ref().to_vec() } }
+    pub fn join<P: AsRef<Path>>(&self, other: P) -> PathBuf {
+        let other = other.as_ref();
+        if other.is_absolute() {
+            return other.to_path_buf();
+        }
+
+        let mut inner = self.inner.as_ref().to_vec();
+        if !inner.is_empty() && !inner.ends_with(&[b'/']) {
+            inner.push(b'/');
+        }
+        inner.extend_from_slice(other.as_os_str().as_bytes());
+        PathBuf { inner }
+    }
     pub fn metadata(&self) -> super::io::Result<super::fs::Metadata> {
         let path_str = self.to_str().unwrap_or("");
         let fd = xv8_libc::open(path_str.as_ptr(), xv8_libc::OpenFlag::READ_ONLY);

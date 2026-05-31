@@ -1,5 +1,6 @@
 use alloc::string::{String, ToString};
 use crate::io::Read;
+use crate::ffi::CString;
 
 #[derive(Clone)]
 pub struct Metadata {
@@ -67,6 +68,7 @@ impl File {
         if fd < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(File { fd: fd as usize }) }
     }
     pub fn options() -> OpenOptions { OpenOptions::new() }
+    pub(crate) fn from_raw_fd(fd: usize) -> Self { File { fd } }
     pub fn read_raw(&self, buf: &mut [u8]) -> super::io::Result<usize> {
         let n = xv8_libc::read(self.fd, buf.as_mut_ptr(), buf.len());
         if n < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(n as usize) }
@@ -189,7 +191,24 @@ pub fn metadata<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Metad
 }
 
 pub fn read_link<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<super::path::PathBuf> {
-    Err(super::io::ErrorKind::Unsupported.into())
+    let path = _path.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let c_path = CString::new(path).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+
+    let mut size = 256usize;
+    loop {
+        let mut buffer = alloc::vec::Vec::with_capacity(size);
+        buffer.resize(size, 0);
+        let n = xv8_libc::readlink(c_path.as_ptr() as *const u8, buffer.as_mut_ptr(), buffer.len());
+        if n < 0 {
+            return Err(super::io::ErrorKind::Other.into());
+        }
+        let n = n as usize;
+        if n < buffer.len() {
+            buffer.truncate(n);
+            return Ok(super::path::PathBuf::from(buffer));
+        }
+        size = size.saturating_mul(2).max(256);
+    }
 }
 
 pub fn symlink_metadata<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Metadata> {
@@ -242,7 +261,7 @@ impl Iterator for ReadDir {
 }
 
 pub fn read<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<alloc::vec::Vec<u8>> {
-    let mut file = File::open(path)?;
+    let file = File::open(path)?;
     let size = file.metadata()?.len() as usize;
     let mut buf = alloc::vec::Vec::with_capacity(size);
     buf.resize(size, 0);
@@ -251,9 +270,10 @@ pub fn read<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<alloc::ve
 }
 
 pub fn read_to_string<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<String> {
-    let mut file = File::open(path)?;
+    let file = File::open(path)?;
     let mut s = String::new();
-    file.read_to_string(&mut s)?;
+    let mut reader = file;
+    reader.read_to_string(&mut s)?;
     Ok(s)
 }
 

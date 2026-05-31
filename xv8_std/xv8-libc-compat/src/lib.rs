@@ -310,6 +310,7 @@ mod riscv64_impl {
         }
     }
 
+    #[allow(non_snake_case)]
     pub fn WIFSTOPPED(status: c_int) -> bool {
         (status & 0xff) == 0x7f
     }

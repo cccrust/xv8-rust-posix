@@ -53,7 +53,10 @@ impl From<ErrorKind> for Error {
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.kind)
+        match self.message {
+            Some(message) => write!(f, "{}", message),
+            None => write!(f, "{:?}", self.kind),
+        }
     }
 }
 

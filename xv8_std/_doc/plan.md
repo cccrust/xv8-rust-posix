@@ -75,6 +75,12 @@ build-std = ["core", "compiler_builtins", "alloc"]
 - `posix/tools` 目標平台編譯驗證通過：135/135
 - `ipcrm` 補齊 `null_mut::<c_void>()` 型別註記，避免泛型指標推導失敗
 
+### v0.5（規劃中）
+- 整理 `xv8_std` 目前仍可消除的警告
+- 實作 `fs::read_link` 的真實 syscall 路徑
+- 實作 `process::Command::spawn` 的真實 syscall 路徑
+- 持續補齊 runtime 行為，讓更多工具不只「能編譯」，也能「能執行」
+
 ## 當前狀態
 
 | 類別 | 數量 |
