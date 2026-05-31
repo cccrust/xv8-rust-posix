@@ -778,3 +778,151 @@ pub fn sys_utimensat(args: &SyscallArgs) -> Result<usize, SysError> {
     inode.put();
     Ok(0)
 }
+
+pub fn sys_readv(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+    let iov_addr = args.get_addr(1);
+    let iovcnt = args.get_int(2) as usize;
+
+    if iovcnt == 0 {
+        return Ok(0);
+    }
+
+    let (_, file) = try_log!(args.get_file(fd));
+    let mut total = 0;
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let pt = data.pagetable_mut();
+
+    for i in 0..iovcnt {
+        let iovec_addr = iov_addr + i * 16;
+        let mut buf_ptr_bytes = [0u8; 8];
+        let mut buf_len_bytes = [0u8; 8];
+        if pt.copy_from(iovec_addr, &mut buf_ptr_bytes).is_err() {
+            break;
+        }
+        if pt.copy_from(iovec_addr + 8, &mut buf_len_bytes).is_err() {
+            break;
+        }
+        let buf_ptr = usize::from_le_bytes(buf_ptr_bytes);
+        let buf_len = usize::from_le_bytes(buf_len_bytes);
+
+        if buf_ptr == 0 || buf_len == 0 {
+            continue;
+        }
+
+        let addr = VA::from(buf_ptr);
+        match file.read(addr, buf_len) {
+            Ok(n) => {
+                total += n;
+                if n < buf_len {
+                    break;
+                }
+            }
+            Err(e) => {
+                if total > 0 {
+                    return Ok(total);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    Ok(total)
+}
+
+pub fn sys_writev(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+    let iov_addr = args.get_addr(1);
+    let iovcnt = args.get_int(2) as usize;
+
+    if iovcnt == 0 {
+        return Ok(0);
+    }
+
+    let (_, mut file) = try_log!(args.get_file(fd));
+    let mut total = 0;
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let pt = data.pagetable_mut();
+
+    for i in 0..iovcnt {
+        let iovec_addr = iov_addr + i * 16;
+        let mut buf_ptr_bytes = [0u8; 8];
+        let mut buf_len_bytes = [0u8; 8];
+        if pt.copy_from(iovec_addr, &mut buf_ptr_bytes).is_err() {
+            break;
+        }
+        if pt.copy_from(iovec_addr + 8, &mut buf_len_bytes).is_err() {
+            break;
+        }
+        let buf_ptr = usize::from_le_bytes(buf_ptr_bytes);
+        let buf_len = usize::from_le_bytes(buf_len_bytes);
+
+        if buf_ptr == 0 || buf_len == 0 {
+            continue;
+        }
+
+        let addr = VA::from(buf_ptr);
+        match file.write(addr, buf_len) {
+            Ok(n) => {
+                total += n;
+                if n < buf_len {
+                    break;
+                }
+            }
+            Err(e) => {
+                if total > 0 {
+                    return Ok(total);
+                }
+                return Err(e);
+            }
+        }
+    }
+
+    Ok(total)
+}
+
+pub fn sys_pread(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+    let addr = args.get_addr(1);
+    let n = args.get_int(2) as usize;
+    let offset = args.get_int(3) as isize;
+
+    let (_, file) = try_log!(args.get_file(fd));
+
+    match &mut FILE_TABLE.inner[file.id].lock().r#type {
+        FileType::Inode { inode } => {
+            let inode = inode.clone();
+            let mut inode_inner = inode.lock();
+            let dst = unsafe { slice::from_raw_parts_mut(addr.as_mut_ptr(), n) };
+            let read = log!(inode.read(&mut inode_inner, offset as u32, dst, true));
+            drop(inode_inner);
+            inode.put();
+            read.map(|r| r as usize).map_err(|_| SysError::IoError)
+        }
+        _ => Err(SysError::BadDescriptor),
+    }
+}
+
+pub fn sys_pwrite(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+    let addr = args.get_addr(1);
+    let n = args.get_int(2) as usize;
+    let offset = args.get_int(3) as isize;
+
+    let (_, mut file) = try_log!(args.get_file(fd));
+
+    match &mut FILE_TABLE.inner[file.id].lock().r#type {
+        FileType::Inode { inode } => {
+            let inode = inode.clone();
+            let mut inode_inner = inode.lock();
+            let src = unsafe { slice::from_raw_parts(addr.as_mut_ptr() as *const u8, n) };
+            let written = log!(inode.write(&mut inode_inner, offset as u32, src, true));
+            drop(inode_inner);
+            inode.put();
+            written.map(|w| w as usize).map_err(|_| SysError::IoError)
+        }
+        _ => Err(SysError::BadDescriptor),
+    }
+}

@@ -102,6 +102,60 @@ fn test_clock_getres() {
     let _ = nsec;
 }
 
+fn test_readv() {
+    let fd = open("/test_readv", O_CREATE_RW).expect("create test file");
+    write(fd, b"hello world").expect("write");
+    close(fd).expect("close");
+
+    let fd = open("/test_readv", OpenFlag::READ_ONLY).expect("open for readv");
+    let mut buf1 = [0u8; 5];
+    let mut buf2 = [0u8; 6];
+    let iovs = &mut [
+        Iovec { iov_base: buf1.as_mut_ptr(), iov_len: 5 },
+        Iovec { iov_base: buf2.as_mut_ptr(), iov_len: 6 },
+    ];
+    let n = readv(fd, iovs).expect("readv should work");
+    assert_eq!(n, 11, "readv should read 11 bytes");
+    close(fd).expect("close");
+    unlink("/test_readv").expect("unlink");
+}
+
+fn test_writev() {
+    let fd = open("/test_writev", O_CREATE_RW).expect("create for writev");
+    let buf1 = [b'h', b'e', b'l', b'l', b'o'];
+    let buf2 = [b' ', b'w', b'o', b'r', b'l', b'd'];
+    let iovs = &[
+        Iovec { iov_base: buf1.as_ptr() as *mut u8, iov_len: 5 },
+        Iovec { iov_base: buf2.as_ptr() as *mut u8, iov_len: 6 },
+    ];
+    let n = writev(fd, iovs).expect("writev should work");
+    assert_eq!(n, 11, "writev should write 11 bytes");
+    close(fd).expect("close");
+
+    let fd = open("/test_writev", OpenFlag::READ_ONLY).expect("open for verify");
+    let mut buf = [0u8; 11];
+    let mut iovs = [Iovec { iov_base: buf.as_mut_ptr(), iov_len: 11 }];
+    readv(fd, &mut iovs).expect("read back");
+    assert_eq!(&buf, b"hello world", "content should match");
+    close(fd).expect("close");
+    unlink("/test_writev").expect("unlink");
+}
+
+fn test_pread() {
+    let fd = open("/test_pread", O_CREATE_RW).expect("create for pread");
+    write(fd, b"0123456789ab").expect("write initial");
+    close(fd).expect("close");
+    unlink("/test_pread").expect("unlink");
+}
+
+fn test_pwrite() {
+    let fd = open("/test_pwrite", O_CREATE_RW).expect("create for pwrite");
+    let n = write(fd, b"XXXX").expect("write should work");
+    close(fd).expect("close");
+    unlink("/test_pwrite").expect("unlink");
+    let _ = n;
+}
+
 #[unsafe(no_mangle)]
 fn main(_args: Args) {
     test_dup2();
@@ -114,4 +168,8 @@ fn main(_args: Args) {
     test_nanosleep();
     test_clock_gettime();
     test_clock_getres();
+    test_readv();
+    test_writev();
+    test_pread();
+    test_pwrite();
 }

@@ -320,6 +320,10 @@ pub enum Syscall {
     ClockGetTime = 68,
     ClockGetRes = 69,
     ClockSetTime = 70,
+    Readv = 71,
+    Writev = 72,
+    Pread = 73,
+    Pwrite = 74,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -396,6 +400,10 @@ impl TryFrom<usize> for Syscall {
             68 => Ok(Syscall::ClockGetTime),
             69 => Ok(Syscall::ClockGetRes),
             70 => Ok(Syscall::ClockSetTime),
+            71 => Ok(Syscall::Readv),
+            72 => Ok(Syscall::Writev),
+            73 => Ok(Syscall::Pread),
+            74 => Ok(Syscall::Pwrite),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -481,6 +489,10 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::ClockGetTime => sys_clock_gettime(&args),
             Syscall::ClockGetRes => sys_clock_getres(&args),
             Syscall::ClockSetTime => sys_clock_settime(&args),
+            Syscall::Readv => sys_readv(&args),
+            Syscall::Writev => sys_writev(&args),
+            Syscall::Pread => sys_pread(&args),
+            Syscall::Pwrite => sys_pwrite(&args),
         },
         Err(e) => Err(e),
     };

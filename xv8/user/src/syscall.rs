@@ -59,6 +59,22 @@ pub mod raw {
     }
 
     #[inline(always)]
+    fn syscall4(syscall: Syscall, a0: usize, a1: usize, a2: usize, a3: usize) -> isize {
+        let ret: isize;
+        unsafe {
+            asm!(
+                "ecall",
+                in("a7") syscall as usize,
+                inlateout("a0") a0 as isize => ret,
+                in("a1") a1,
+                in("a2") a2,
+                in("a3") a3,
+            );
+        }
+        ret
+    }
+
+    #[inline(always)]
     fn syscall5(syscall: Syscall, a0: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> isize {
         let ret: isize;
         unsafe {
@@ -295,6 +311,22 @@ pub mod raw {
 
     pub fn clock_settime(clock_id: usize, ts_addr: usize) -> isize {
         syscall2(Syscall::ClockSetTime, clock_id, ts_addr)
+    }
+
+    pub fn readv(fd: usize, iov: usize, iovcnt: usize) -> isize {
+        syscall3(Syscall::Readv, fd, iov, iovcnt)
+    }
+
+    pub fn writev(fd: usize, iov: usize, iovcnt: usize) -> isize {
+        syscall3(Syscall::Writev, fd, iov, iovcnt)
+    }
+
+    pub fn pread(fd: usize, buf: usize, n: usize, offset: usize) -> isize {
+        syscall4(Syscall::Pread, fd, buf, n, offset)
+    }
+
+    pub fn pwrite(fd: usize, buf: usize, n: usize, offset: usize) -> isize {
+        syscall4(Syscall::Pwrite, fd, buf, n, offset)
     }
 }
 
@@ -615,4 +647,26 @@ pub fn clock_getres() -> Result<(u64, u64), SysError> {
 
 pub fn clock_settime(_sec: u64, _nsec: u64) -> Result<(), SysError> {
     check_unit(raw::clock_settime(0, 0))
+}
+
+#[repr(C)]
+pub struct Iovec {
+    pub iov_base: *mut u8,
+    pub iov_len: usize,
+}
+
+pub fn readv(fd: Fd, iovs: &mut [Iovec]) -> Result<usize, SysError> {
+    check(raw::readv(fd.as_raw(), iovs.as_mut_ptr() as usize, iovs.len()))
+}
+
+pub fn writev(fd: Fd, iovs: &[Iovec]) -> Result<usize, SysError> {
+    check(raw::writev(fd.as_raw(), iovs.as_ptr() as usize, iovs.len()))
+}
+
+pub fn pread(fd: Fd, buf: &mut [u8], offset: usize) -> Result<usize, SysError> {
+    check(raw::pread(fd.as_raw(), buf.as_mut_ptr() as usize, buf.len(), offset))
+}
+
+pub fn pwrite(fd: Fd, buf: &[u8], offset: usize) -> Result<usize, SysError> {
+    check(raw::pwrite(fd.as_raw(), buf.as_ptr() as usize, buf.len(), offset))
 }
