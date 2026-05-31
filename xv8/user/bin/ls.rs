@@ -9,6 +9,7 @@ fn type_char(t: InodeType) -> char {
         InodeType::Directory => 'd',
         InodeType::Device => 'D',
         InodeType::SymLink => 'l',
+        InodeType::Fifo => 'p',
         InodeType::Free => '?',
     }
 }
@@ -62,7 +63,7 @@ fn ls(path: &str) {
                 ls(file_path);
             }
         }
-        InodeType::File | InodeType::Device | InodeType::SymLink => {
+        InodeType::File | InodeType::Device | InodeType::SymLink | InodeType::Fifo => {
             println!(
                 "{} {:>4} {:>8} {}",
                 type_char(stat.r#type),

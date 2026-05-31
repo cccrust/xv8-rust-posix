@@ -184,6 +184,7 @@ pub enum InodeType {
     File = 2,
     Device = 3,
     SymLink = 4,
+    Fifo = 5,
 }
 
 /// On-disk inode structure

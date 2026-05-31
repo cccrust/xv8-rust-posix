@@ -31,6 +31,25 @@ pub struct Pipe {
 }
 
 impl Pipe {
+    /// Allocates a new pipe and returns the shared Arc
+    pub fn alloc_arc() -> Result<Arc<Pipe>, FsError> {
+        let Ok(pipe) = log!(Arc::try_new(Pipe {
+            inner: SpinLock::new(
+                PipeInner {
+                    data: [0; PIPESIZE],
+                    num_read: 0,
+                    num_write: 0,
+                    read_open: true,
+                    write_open: true,
+                },
+                "fifo_pipe",
+            ),
+        })) else {
+            err!(FsError::OutOfPipe)
+        };
+        Ok(pipe)
+    }
+
     /// Allocates a new pipe and returns the read and write file descriptors
     pub fn alloc() -> Result<(File, File), FsError> {
         let mut f0 = try_log!(File::alloc());

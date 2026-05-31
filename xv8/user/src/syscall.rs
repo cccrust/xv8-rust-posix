@@ -126,6 +126,14 @@ pub mod raw {
         syscall1(Syscall::Pipe, fds as usize)
     }
 
+    pub fn mkfifo(path: *const u8) -> isize {
+        syscall1(Syscall::Mkfifo, path as usize)
+    }
+
+    pub fn pipe2(fds: *mut usize, flags: usize) -> isize {
+        syscall2(Syscall::Pipe2, fds as usize, flags)
+    }
+
     pub fn read(fd: usize, buf: *mut u8, len: usize) -> isize {
         syscall3(Syscall::Read, fd, buf as usize, len)
     }
@@ -669,4 +677,15 @@ pub fn pread(fd: Fd, buf: &mut [u8], offset: usize) -> Result<usize, SysError> {
 
 pub fn pwrite(fd: Fd, buf: &[u8], offset: usize) -> Result<usize, SysError> {
     check(raw::pwrite(fd.as_raw(), buf.as_ptr() as usize, buf.len(), offset))
+}
+
+pub fn mkfifo(path: &str) -> Result<(), SysError> {
+    let cpath = validate_path(path)?;
+    check_unit(raw::mkfifo(cpath.as_ptr()))
+}
+
+pub fn pipe2(flags: usize) -> Result<(Fd, Fd), SysError> {
+    let mut fds = [0usize; 2];
+    check_unit(raw::pipe2(fds.as_mut_ptr(), flags))?;
+    Ok((Fd(fds[0]), Fd(fds[1])))
 }

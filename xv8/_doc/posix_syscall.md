@@ -1,6 +1,6 @@
 # xv8 POSIX System Call 支援分析
 
-## 已實作的 System Calls (52 個)
+## 已實作的 System Calls (54 個)
 
 | syscall | 狀態 | 說明 |
 |---------|------|------|
@@ -44,6 +44,16 @@
 | getegid | ✓ | POSIX 標準 (新增) |
 | gettimeofday | ✓ | POSIX 標準 (新增) |
 | uname | ✓ | POSIX 標準 (新增) |
+| setpgid | ✓ | POSIX 標準 (v0.9) |
+| getsid | ✓ | POSIX 標準 (v0.9) |
+| setreuid | ✓ | POSIX 標準 (v0.9) |
+| setregid | ✓ | POSIX 標準 (v0.9) |
+| setresuid | ✓ | POSIX 標準 (v0.9) |
+| setresgid | ✓ | POSIX 標準 (v0.9) |
+| getresuid | ✓ | POSIX 標準 (v0.9) |
+| getresgid | ✓ | POSIX 標準 (v0.9) |
+| mkfifo | ✓ | POSIX 標準 (v0.10) |
+| pipe2 | ✓ | POSIX 標準 (v0.10) |
 
 ## OpenFlag POSIX 標準值
 
@@ -83,17 +93,12 @@ pub struct Stat {
 | stat / fstatat | 已有 fstat，stat 可透過路徑實現 |
 | symlink / readlink | 符號連結支援 |
 | utimensat | 改變檔案時間戳 |
-| getpgrp / setpgid | 程序群組管理 |
-| setsid | 建立新 session |
 | alarm / setitimer | 鬧鐘/計時器 |
-| times | 取得进程時間 |
-| sync | 同步檔案系統 |
 | mount / umount | 掛載/卸載檔案系統 |
-| nice | 改變程序優先權 |
 
 ## 測試狀態
 
-所有 7 個測試通過:
+所有 8 個測試通過:
 - test fs ... ok
 - test pipe ... ok
 - test proc ... ok
@@ -101,6 +106,7 @@ pub struct Stat {
 - test sbrk ... ok
 - test cow ... ok
 - test net ... ok
+- test syscall ... ok
 
 ## 結論
 
@@ -109,7 +115,11 @@ xv8 已支援大多數常用的 POSIX system calls，包括:
 - 程序管理 (fork, exec, exit, wait, kill, getpid)
 - 目錄操作 (mkdir, rmdir, chdir)
 - 連結操作 (link, unlink)
-- 時間查詢 (gettimeofday, uptime, sleep)
-- 身份識別 (getuid, geteuid, getgid, getegid)
+- 時間查詢 (gettimeofday, uptime, sleep, time, nanosleep, clock_gettime)
+- 身份識別 (getuid, geteuid, getgid, getegid, setreuid, setregid, setresuid, setresgid, getresuid, getresgid, setuid, setgid)
+- 程序群組 (getpgid, setpgid, getpgrp, setsid, getsid)
+- 命名管道 (mkfifo, pipe2)
 - 系統資訊 (uname)
 - 網路 socket (socket, send, receive)
+- 記憶體 (mmap, munmap, mprotect, sbrk)
+- 終端 (isatty, tcgetattr, tcsetattr)

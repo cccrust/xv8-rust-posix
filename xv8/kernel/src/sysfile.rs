@@ -2,6 +2,7 @@ use core::mem;
 use core::slice;
 
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -15,6 +16,7 @@ use crate::pipe::Pipe;
 use crate::proc;
 use crate::proc::current_proc_and_data_mut;
 use crate::riscv::PGSIZE;
+use crate::spinlock::SpinLock;
 use crate::syscall::{SysError, SyscallArgs};
 use crate::vm::VA;
 
@@ -296,6 +298,28 @@ pub fn sys_open(args: &SyscallArgs) -> Result<usize, SysError> {
             inode: inode.clone(),
             major: inode_inner.major,
         };
+    } else if inode_inner.r#type == InodeType::Fifo {
+        let inum = inode.inum;
+        let pipe = {
+            let mut fifo = FIFO_TABLE.lock();
+            if let Some((_, p)) = fifo.iter().find(|(i, _)| *i == inum) {
+                p.clone()
+            } else {
+                let pipe = match log!(Pipe::alloc_arc()) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        inode.unlock_put(inode_inner);
+                        return Err(SysError::from(e));
+                    }
+                };
+                fifo.push((inum, pipe.clone()));
+                pipe
+            }
+        };
+        file_inner.r#type = FileType::Pipe { pipe };
+        file_inner.readable = (o_mode & OpenFlag::WRITE_ONLY) == 0;
+        file_inner.writeable =
+            (o_mode & OpenFlag::WRITE_ONLY) != 0 || (o_mode & OpenFlag::READ_WRITE != 0);
     } else {
         file_inner.r#type = FileType::Inode {
             inode: inode.clone(),
@@ -925,4 +949,26 @@ pub fn sys_pwrite(args: &SyscallArgs) -> Result<usize, SysError> {
         }
         _ => Err(SysError::BadDescriptor),
     }
+}
+
+static FIFO_TABLE: SpinLock<Vec<(u32, Arc<Pipe>)>> = SpinLock::new(Vec::new(), "fifo");
+
+pub fn sys_mkfifo(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _op = Operation::begin();
+
+    let path = try_log!(args.fetch_string(args.get_addr(0), MAXPATH));
+
+    let (inode, inner) = match log!(Inode::create(&Path::new(&path), InodeType::Fifo, 0, 0)) {
+        Ok(i) => i,
+        Err(e) => err!(SysError::from(e)),
+    };
+
+    inode.unlock_put(inner);
+
+    Ok(0)
+}
+
+pub fn sys_pipe2(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _flags = args.get_int(0) as usize;
+    sys_pipe(args)
 }

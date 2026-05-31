@@ -331,6 +331,8 @@ pub enum Syscall {
     Setresgid = 80,
     Getresuid = 81,
     Getresgid = 82,
+    Mkfifo = 83,
+    Pipe2 = 84,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -419,6 +421,8 @@ impl TryFrom<usize> for Syscall {
             80 => Ok(Syscall::Setresgid),
             81 => Ok(Syscall::Getresuid),
             82 => Ok(Syscall::Getresgid),
+            83 => Ok(Syscall::Mkfifo),
+            84 => Ok(Syscall::Pipe2),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -515,6 +519,8 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Setresgid => sys_setresgid(&args),
             Syscall::Getresuid => sys_getresuid(&args),
             Syscall::Getresgid => sys_getresgid(&args),
+            Syscall::Mkfifo => sys_mkfifo(&args),
+            Syscall::Pipe2 => sys_pipe2(&args),
         },
         Err(e) => Err(e),
     };

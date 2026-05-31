@@ -1,8 +1,8 @@
 # xv8 POSIX System Call 實作規劃
 
-## 目前狀態 (v0.9)
+## 目前狀態 (v0.10)
 
-已完成 v0.5、v0.6、v0.7、v0.8 和 v0.9，已實作 **82 個** system calls。
+已完成 v0.5~v0.10，已實作 **84 個** system calls。
 
 ## 待實作項目
 
@@ -18,13 +18,6 @@
 | setresgid | 80 | 設定真實/有效/儲存 GID |
 | getresuid | 81 | 取得真實/有效/儲存 UID |
 | getresgid | 82 | 取得真實/有效/儲存 GID |
-
-### v0.10 - FIFO 與管道增強
-
-| syscall | 編號 | 說明 |
-|---------|------|------|
-| mkfifo | 83 | 建立命名管道 |
-| pipe2 | 84 | 建立管道（帶 flags） |
 
 ### v0.11 - TTY 擴展
 
