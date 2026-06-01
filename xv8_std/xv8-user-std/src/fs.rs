@@ -1,4 +1,5 @@
 use alloc::string::{String, ToString};
+use core::mem::size_of;
 use crate::io::Read;
 use crate::ffi::CString;
 
@@ -19,13 +20,13 @@ impl Metadata {
         let n = xv8_libc::fstat(fd, &mut stat as *mut _);
         if n < 0 { return Err(super::io::ErrorKind::Other.into()); }
         Ok(Metadata {
-            mode: stat.mode,
-            uid: stat.uid,
-            gid: stat.gid,
+            mode: stat.mode as u32,
+            uid: stat.uid as u32,
+            gid: stat.gid as u32,
             size: stat.size,
             mtime: 0,
             nlink: stat.nlink as u32,
-            ino: stat.ino,
+            ino: stat.ino as u64,
         })
     }
     pub fn is_dir(&self) -> bool { (self.mode & 0o170000) == 0o40000 }
@@ -58,13 +59,15 @@ pub struct File { fd: usize }
 impl File {
     pub fn open<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Self> {
         let path_str = path.as_ref().to_str().unwrap_or("");
-        let fd = xv8_libc::open(path_str.as_ptr(), xv8_libc::OpenFlag::READ_ONLY);
+        let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+        let fd = xv8_libc::open(c_path.as_ptr() as *const u8, xv8_libc::OpenFlag::READ_ONLY);
         if fd < 0 { Err(super::io::ErrorKind::NotFound.into()) } else { Ok(File { fd: fd as usize }) }
     }
     pub fn create<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Self> {
         let path_str = path.as_ref().to_str().unwrap_or("");
+        let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
         let flags = xv8_libc::OpenFlag::WRITE_ONLY | xv8_libc::OpenFlag::CREATE | xv8_libc::OpenFlag::TRUNCATE;
-        let fd = xv8_libc::open(path_str.as_ptr(), flags);
+        let fd = xv8_libc::open(c_path.as_ptr() as *const u8, flags);
         if fd < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(File { fd: fd as usize }) }
     }
     pub fn options() -> OpenOptions { OpenOptions::new() }
@@ -139,6 +142,7 @@ impl OpenOptions {
     pub fn mode(&mut self, mode: u32) -> &mut Self { self.mode = mode; self }
     pub fn open<P: AsRef<super::path::Path>>(&self, path: P) -> super::io::Result<File> {
         let path_str = path.as_ref().to_str().unwrap_or("");
+        let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
         let mut flags = 0usize;
         if self.read && self.write { flags |= xv8_libc::OpenFlag::READ_WRITE; }
         else if self.write { flags |= xv8_libc::OpenFlag::WRITE_ONLY; }
@@ -147,7 +151,7 @@ impl OpenOptions {
         if self.create || self.create_new { flags |= xv8_libc::OpenFlag::CREATE; }
         if self.truncate { flags |= xv8_libc::OpenFlag::TRUNCATE; }
         if self.append { flags |= xv8_libc::OpenFlag::APPEND; }
-        let fd = xv8_libc::open(path_str.as_ptr(), flags);
+        let fd = xv8_libc::open(c_path.as_ptr() as *const u8, flags);
         if fd < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(File { fd: fd as usize }) }
     }
 }
@@ -162,8 +166,11 @@ pub fn write<P: AsRef<super::path::Path>, C: AsRef<[u8]>>(path: P, contents: C) 
     f.write_all(contents.as_ref())
 }
 
-pub fn create_dir<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn create_dir<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<()> {
+    let path_str = path.as_ref().to_str().unwrap_or("");
+    let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let ret = xv8_libc::mkdir(c_path.as_ptr() as *const u8, 0o755);
+    if ret < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
 
 pub fn remove_file<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
@@ -237,12 +244,19 @@ impl FileType {
     pub fn is_symlink(&self) -> bool { matches!(self, FileType::Symlink) }
 }
 
-pub struct ReadDir { _path: String, _offset: usize }
-pub struct DirEntry { _name: String, _metadata: Option<Metadata> }
+pub struct ReadDir { file: File, _path: String, _offset: usize }
+pub struct DirEntry { _path: String, _name: String, _metadata: Option<Metadata> }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct Directory {
+    inum: u16,
+    name: [u8; 14],
+}
 
 impl DirEntry {
     pub fn path(&self) -> super::path::PathBuf {
-        super::path::PathBuf::from(self._name.as_bytes())
+        super::path::PathBuf::from(self._path.as_bytes())
     }
     pub fn file_name(&self) -> &super::ffi::OsStr {
         super::ffi::OsStr::from_str(&self._name)
@@ -257,7 +271,45 @@ impl DirEntry {
 
 impl Iterator for ReadDir {
     type Item = super::io::Result<DirEntry>;
-    fn next(&mut self) -> Option<Self::Item> { None }
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut buf = [0u8; size_of::<Directory>()];
+        loop {
+            let n = match self.file.read_raw(&mut buf) {
+                Ok(n) => n,
+                Err(e) => return Some(Err(e)),
+            };
+
+            if n == 0 {
+                return None;
+            }
+
+            if n != buf.len() {
+                return Some(Err(super::io::ErrorKind::Other.into()));
+            }
+
+            let dir = unsafe { &*(buf.as_ptr() as *const Directory) };
+            if dir.inum == 0 {
+                continue;
+            }
+
+            let name_len = dir.name.iter().position(|&c| c == 0).unwrap_or(dir.name.len());
+            let name = match core::str::from_utf8(&dir.name[..name_len]) {
+                Ok(s) if !s.is_empty() => s.to_string(),
+                _ => continue,
+            };
+
+            let path = if self._path == "/" {
+                format!("/{}", name)
+            } else if self._path.is_empty() {
+                name.clone()
+            } else {
+                format!("{}/{}", self._path, name)
+            };
+
+            let metadata = File::open(&path).ok().and_then(|file| file.metadata().ok());
+            return Some(Ok(DirEntry { _path: path, _name: name, _metadata: metadata }));
+        }
+    }
 }
 
 pub fn read<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<alloc::vec::Vec<u8>> {
@@ -278,5 +330,7 @@ pub fn read_to_string<P: AsRef<super::path::Path>>(path: P) -> super::io::Result
 }
 
 pub fn read_dir<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<ReadDir> {
-    Ok(ReadDir { _path: path.as_ref().to_str().unwrap_or("").to_string(), _offset: 0 })
+    let path_str = path.as_ref().to_str().unwrap_or("").to_string();
+    let file = File::open(path.as_ref())?;
+    Ok(ReadDir { file, _path: path_str, _offset: 0 })
 }

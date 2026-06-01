@@ -14,13 +14,13 @@ fn main() {
                 "-m" | "-M" => {
                     let id: i32 = val.parse().unwrap_or(-1);
                     if id >= 0 {
-                        unsafe { libc::shmctl(id, libc::IPC_RMID, std::ptr::null_mut::<libc::c_void>()); }
+                        unsafe { libc::shmctl(id, libc::IPC_RMID, std::ptr::null_mut::<libc::shmid_ds>()); }
                     }
                 }
                 "-s" | "-S" => {
                     let id: i32 = val.parse().unwrap_or(-1);
                     if id >= 0 {
-                        unsafe { libc::semctl(id, 0, libc::IPC_RMID, std::ptr::null_mut::<()>()); }
+                        unsafe { libc::semctl(id, 0, libc::IPC_RMID, std::ptr::null_mut::<libc::semid_ds>()); }
                     }
                 }
                 _ => {

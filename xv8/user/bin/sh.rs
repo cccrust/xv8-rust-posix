@@ -415,6 +415,8 @@ fn exec_cmd(cmd: &str, args: &[&str]) -> ! {
 
 #[unsafe(no_mangle)]
 fn main(_args: Args) {
+    let _ = setenv("PWD", "/", true);
+
     // ensure that three file descriptors are open
     loop {
         let Ok(fd) = open("console", OpenFlag::READ_WRITE) else {
@@ -442,6 +444,8 @@ fn main(_args: Args) {
                 let path = tokenizer.next_token().unwrap_or("/");
                 if let Err(e) = chdir(path) {
                     eprintln!("cd: {} {}", path, e);
+                } else {
+                    let _ = setenv("PWD", path, true);
                 }
             }
             Some(_) => {

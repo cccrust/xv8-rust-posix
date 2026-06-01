@@ -288,7 +288,7 @@ impl Stdin {
     pub fn lines(self) -> Lines<StdinLock> {
         Lines { inner: self.lock() }
     }
-    pub fn is_terminal(&self) -> bool { false }
+    pub fn is_terminal(&self) -> bool { xv8_libc::isatty(0) == 1 }
 }
 
 impl Write for Stdin {
@@ -454,12 +454,12 @@ pub trait IsTerminal {
     fn is_terminal(&self) -> bool;
 }
 
-impl IsTerminal for Stdin { fn is_terminal(&self) -> bool { false } }
-impl IsTerminal for Stdout { fn is_terminal(&self) -> bool { false } }
-impl IsTerminal for Stderr { fn is_terminal(&self) -> bool { false } }
-impl IsTerminal for StdinLock { fn is_terminal(&self) -> bool { false } }
-impl IsTerminal for StdoutLock { fn is_terminal(&self) -> bool { false } }
-impl IsTerminal for StderrLock { fn is_terminal(&self) -> bool { false } }
+impl IsTerminal for Stdin { fn is_terminal(&self) -> bool { xv8_libc::isatty(0) == 1 } }
+impl IsTerminal for Stdout { fn is_terminal(&self) -> bool { xv8_libc::isatty(1) == 1 } }
+impl IsTerminal for Stderr { fn is_terminal(&self) -> bool { xv8_libc::isatty(2) == 1 } }
+impl IsTerminal for StdinLock { fn is_terminal(&self) -> bool { xv8_libc::isatty(0) == 1 } }
+impl IsTerminal for StdoutLock { fn is_terminal(&self) -> bool { xv8_libc::isatty(1) == 1 } }
+impl IsTerminal for StderrLock { fn is_terminal(&self) -> bool { xv8_libc::isatty(2) == 1 } }
 
 pub fn _print(args: core::fmt::Arguments<'_>) {
     let _ = Stdout.write_fmt(args);

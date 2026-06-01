@@ -580,3 +580,6 @@ path = "src/bin/mailx.rs"
 [[bin]]
 name = "su"
 path = "src/bin/su.rs"
+[[bin]]
+name = "test_dir"
+path = "src/bin/test_dir.rs"

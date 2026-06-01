@@ -9,7 +9,7 @@ pub struct EnvArgs {
 
 impl EnvArgs {
     fn new() -> Self {
-        EnvArgs { inner: unsafe { xv8_libc::args::Args::from_stack() }, current: 1 }
+        EnvArgs { inner: unsafe { xv8_libc::args::Args::from_stack() }, current: 0 }
     }
 }
 
@@ -40,13 +40,22 @@ impl Iterator for EmptyEnvVars {
 pub fn vars() -> EmptyEnvVars { EmptyEnvVars }
 
 pub fn current_dir() -> super::io::Result<super::path::PathBuf> {
-    Err(super::io::ErrorKind::Unsupported.into())
+    match var("PWD") {
+        Ok(path) if !path.is_empty() => Ok(super::path::PathBuf::from(path.as_bytes())),
+        _ => Ok(super::path::PathBuf::from(b"/")),
+    }
 }
 
 pub fn set_current_dir(path: &super::path::Path) -> super::io::Result<()> {
     let path_str = path.to_str().unwrap_or("");
-    let n = xv8_libc::chdir(path_str.as_ptr());
-    if n < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
+    let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let n = xv8_libc::chdir(c_path.as_ptr() as *const u8);
+    if n < 0 {
+        Err(super::io::ErrorKind::Other.into())
+    } else {
+        set_var("PWD", path_str);
+        Ok(())
+    }
 }
 
 pub fn var(key: &str) -> Result<String, VarError> {

@@ -1,5 +1,6 @@
 use alloc::string::ToString;
 use alloc::vec::Vec;
+use crate::ffi::CString;
 
 pub struct Path { inner: [u8] }
 
@@ -49,7 +50,8 @@ impl Path {
     }
     pub fn metadata(&self) -> super::io::Result<super::fs::Metadata> {
         let path_str = self.to_str().unwrap_or("");
-        let fd = xv8_libc::open(path_str.as_ptr(), xv8_libc::OpenFlag::READ_ONLY);
+        let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+        let fd = xv8_libc::open(c_path.as_ptr() as *const u8, xv8_libc::OpenFlag::READ_ONLY);
         if fd < 0 {
             Err(super::io::ErrorKind::NotFound.into())
         } else {
@@ -63,7 +65,10 @@ impl Path {
     pub fn display(&self) -> DisplayPath<'_> { DisplayPath(self) }
     pub fn exists(&self) -> bool {
         let path_str = self.to_str().unwrap_or("");
-        let fd = xv8_libc::open(path_str.as_ptr(), xv8_libc::OpenFlag::READ_ONLY);
+        let Ok(c_path) = CString::new(path_str) else {
+            return false;
+        };
+        let fd = xv8_libc::open(c_path.as_ptr() as *const u8, xv8_libc::OpenFlag::READ_ONLY);
         if fd >= 0 {
             xv8_libc::close(fd as usize);
             true

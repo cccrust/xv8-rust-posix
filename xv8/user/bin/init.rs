@@ -5,6 +5,8 @@ use user::*;
 
 #[unsafe(no_mangle)]
 fn main(_args: Args) {
+    let _ = setenv("PWD", "/", true);
+
     if open("console", OpenFlag::READ_WRITE).is_err() {
         mknod("console", CONSOLE, 0).expect("init: cannot create console");
         open("console", OpenFlag::READ_WRITE).expect("init: cannot open console");

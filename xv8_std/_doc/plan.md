@@ -75,11 +75,18 @@ build-std = ["core", "compiler_builtins", "alloc"]
 - `posix/tools` 目標平台編譯驗證通過：135/135
 - `ipcrm` 補齊 `null_mut::<c_void>()` 型別註記，避免泛型指標推導失敗
 
-### v0.5（規劃中）
+### v0.5（已完成）
 - 整理 `xv8_std` 目前仍可消除的警告
 - 實作 `fs::read_link` 的真實 syscall 路徑
 - 實作 `process::Command::spawn` 的真實 syscall 路徑
 - 持續補齊 runtime 行為，讓更多工具不只「能編譯」，也能「能執行」
+
+### v0.6（已完成）
+- 建立根目錄 `test.sh`，串起 `posix`、`xv8_std`、`xv8` 三段驗證
+- 加入 `rustc-wrapper`，讓 `posix/tools` 的 xv8 target bin 自動帶上 `no_main`
+- 修正 `basic.rs` 的工具路徑解析，避免測到系統 `mailx`
+- 修正 `ipcrm.rs` 的 shm/sem 指標型別，讓 target build 穩定通過
+- 完成整體驗證：`posix` host tests、`posix` target build、`xv8_std` target build、`xv8` integration tests 全過
 
 ## 當前狀態
 
@@ -88,6 +95,7 @@ build-std = ["core", "compiler_builtins", "alloc"]
 | 工具總數 | 135 |
 | 編譯成功 | 135 |
 | libc 依賴失敗 | 0 |
+| 全鏈路驗證 | 通過 |
 
 ## 限制
 

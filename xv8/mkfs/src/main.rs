@@ -14,7 +14,7 @@ const MAXOPBLOCKS: u32 = 10;
 /// max data blocks in on-disk log
 const LOGBLOCKS: u32 = MAXOPBLOCKS * 3;
 /// size of file system in blocks
-const FSSIZE: u32 = 2000;
+const FSSIZE: u32 = 32768;
 
 /// File system magic number
 const FSMAGIC: u32 = 0x10203040;
@@ -311,15 +311,25 @@ fn append_inode(file: &File, free_block: &mut u32, inum: u32, mut data: &[u8]) {
 fn allocate_block(file: &File, used: u32, bmapstart: u32) {
     println!("first {used} blocks have been allocated");
 
-    assert!(used < BPB);
+    assert!(used <= FSSIZE);
 
     let mut buf = [0u8; BSIZE as usize];
 
-    for i in 0..used as usize {
-        buf[i / 8] |= 0x1 << (i % 8);
-    }
+    for block in 0..NBITMAP {
+        let start = block * BPB;
+        if start >= used {
+            break;
+        }
 
-    write_sector(file, bmapstart, &buf);
+        let end = (start + BPB).min(used);
+        for i in start..end {
+            let bit = (i - start) as usize;
+            buf[bit / 8] |= 0x1 << (bit % 8);
+        }
+
+        write_sector(file, bmapstart + block, &buf);
+        buf.fill(0);
+    }
 
     println!("wrote bitmap block at sector {bmapstart}");
 }

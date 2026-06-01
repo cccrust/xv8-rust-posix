@@ -11,14 +11,19 @@ fn tool_path(name: &str) -> String {
         return path;
     }
 
-    // Fallback: look in target directory relative to crate root
+    // Fallback: look in the workspace's package target directory first.
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let target_dir = if cfg!(debug_assertions) { "debug" } else { "release" };
-    // Try workspace root (cargo run from workspace)
-    let cwd = std::env::current_dir().unwrap();
+    let package_target = manifest_dir
+        .parent()
+        .unwrap()
+        .join("target")
+        .join(target_dir);
     let candidates = [
-        cwd.join("target").join(target_dir).join(name),
-        cwd.join("target").join(target_dir).join(&format!("{}.exe", name)),
-        cwd.parent().unwrap().join("target").join(target_dir).join(name),
+        package_target.join(name),
+        package_target.join(format!("{}.exe", name)),
+        std::env::current_dir().unwrap().join("target").join(target_dir).join(name),
+        std::env::current_dir().unwrap().parent().unwrap().join("target").join(target_dir).join(name),
     ];
 
     for p in &candidates {

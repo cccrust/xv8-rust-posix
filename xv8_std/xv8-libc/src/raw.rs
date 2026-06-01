@@ -17,12 +17,14 @@ pub enum Syscall {
     Wait = 3,
     Getpid = 11,
     Chdir = 9,
+    Mkdir = 20,
     Readlink = 45,
     Getenv = 103,
     Setenv = 104,
     Unsetenv = 105,
     Clearenv = 106,
     Sbrk = 12,
+    Isatty = 59,
 }
 
 #[inline(always)]
@@ -128,6 +130,10 @@ pub fn chdir(path: *const u8) -> isize {
     syscall1(Syscall::Chdir, path as usize)
 }
 
+pub fn mkdir(path: *const u8, mode: usize) -> isize {
+    syscall2(Syscall::Mkdir, path as usize, mode)
+}
+
 pub fn readlink(path: *const u8, buf: *mut u8, len: usize) -> isize {
     syscall3(Syscall::Readlink, path as usize, buf as usize, len)
 }
@@ -152,18 +158,21 @@ pub fn sbrk(n: isize) -> isize {
     syscall1(Syscall::Sbrk, n as usize)
 }
 
+pub fn isatty(fd: usize) -> isize {
+    syscall1(Syscall::Isatty, fd)
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct Stat {
-    pub dev: u64,
-    pub ino: u64,
-    pub nlink: u64,
-    pub mode: u32,
-    pub uid: u32,
-    pub gid: u32,
-    pub _pad0: u32,
+    pub dev: u32,
+    pub ino: u32,
+    pub r#type: u16,
+    pub mode: u16,
+    pub nlink: u16,
+    pub uid: u16,
+    pub gid: u16,
     pub size: u64,
-    pub blksize: u32,
-    pub blocks: u32,
-    pub _pad1: u64,
+    pub atime: u32,
+    pub mtime: u32,
 }

@@ -601,11 +601,19 @@ impl Inode {
     }
 
     pub fn stat(&self, inner: &SleepLockGuard<'_, InodeInner>) -> Stat {
+        let mode = match inner.r#type {
+            InodeType::Directory => 0o40755,
+            InodeType::File => 0o100644,
+            InodeType::Device => 0o20666,
+            InodeType::SymLink => 0o120777,
+            InodeType::Fifo => 0o10666,
+            InodeType::Free => 0,
+        };
         Stat {
             dev: self.dev,
             ino: self.inum,
             r#type: inner.r#type,
-            mode: inner.mode,
+            mode,
             nlink: inner.nlink,
             uid: inner.uid,
             gid: inner.gid,
