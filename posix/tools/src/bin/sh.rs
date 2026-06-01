@@ -18,6 +18,19 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() > 1 {
+        if args[1] == "-c" && args.len() > 2 {
+            let cmd = &args[2];
+            let mut last_status = 0;
+            let lines: Vec<String> = cmd.lines().map(|l| l.to_string()).collect();
+            let mut idx = 0;
+            while idx < lines.len() {
+                let trimmed = lines[idx].trim().to_string();
+                idx += 1;
+                if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
+                idx = exec_line(&trimmed, &lines, idx, &args, &mut last_status);
+            }
+            exit(last_status);
+        }
         let content = fs::read_to_string(&args[1]).unwrap_or_else(|e| {
             eprintln!("sh: cannot open '{}': {}", args[1], e);
             exit(1);

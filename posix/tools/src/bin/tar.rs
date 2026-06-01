@@ -1,7 +1,14 @@
+fn parse_tar_size(header: &[u8]) -> usize {
+    let raw = std::str::from_utf8(&header[124..136]).unwrap_or("0");
+    let trimmed = raw.trim_end_matches(|c| c == '\0' || c == ' ');
+    usize::from_str_radix(trimmed, 8).unwrap_or(0)
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let mut create = false;
     let mut extract = false;
+    let mut list = false;
     let mut file = String::from("a.tar");
     let mut i = 1;
 
@@ -11,6 +18,7 @@ fn main() {
             match c {
                 'c' => create = true,
                 'x' => extract = true,
+                't' => list = true,
                 'f' => { i += 1; if i < args.len() { file = args[i].clone(); } }
                 _ => { eprintln!("tar: invalid option -- '{}'", c); std::process::exit(1); }
             }
@@ -59,7 +67,9 @@ fn main() {
         // Two zero blocks at end
         use std::io::Write;
         out.write_all(&[0u8; 1024]).unwrap();
-    } else if extract {
+    }
+
+    if extract {
         let data = std::fs::read(&file).unwrap_or_else(|e| {
             eprintln!("tar: cannot open '{}': {}", file, e);
             std::process::exit(1);
@@ -73,9 +83,7 @@ fn main() {
             let name = std::str::from_utf8(&header[..name_end]).unwrap_or("");
             if name.is_empty() { break; }
 
-            // Parse size (octal at offset 124, 12 bytes)
-            let size_str = std::str::from_utf8(&header[124..136]).unwrap_or("0").trim();
-            let size = usize::from_str_radix(size_str, 8).unwrap_or(0);
+            let size = parse_tar_size(header);
 
             pos += 512;
             if pos + size > data.len() { break; }
@@ -87,7 +95,9 @@ fn main() {
 
             pos += ((size + 511) / 512) * 512;
         }
-    } else {
+    }
+
+    if list {
         // List
         let data = std::fs::read(&file).unwrap_or_else(|e| {
             eprintln!("tar: cannot open '{}': {}", file, e);
@@ -101,8 +111,7 @@ fn main() {
             let name = std::str::from_utf8(&header[..name_end]).unwrap_or("");
             if name.is_empty() { break; }
             println!("{}", name);
-            let size_str = std::str::from_utf8(&header[124..136]).unwrap_or("0").trim();
-            let size = usize::from_str_radix(size_str, 8).unwrap_or(0);
+            let size = parse_tar_size(header);
             pos += 512 + ((size + 511) / 512) * 512;
         }
     }

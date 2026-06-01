@@ -10,14 +10,54 @@ fn main() {
 
     while i < args.len() && args[i].starts_with('-') && args[i] != "--" {
         if args[i] == "--" { i += 1; break; }
-        for c in args[i][1..].chars() {
+        let arg = args[i].clone();
+        let mut j = 0;
+        let chars_vec: Vec<char> = arg[1..].chars().collect();
+        while j < chars_vec.len() {
+            let c = chars_vec[j];
             match c {
-                'd' => { i += 1; if i < args.len() { delim = args[i].as_bytes()[0]; } }
-                'f' => { i += 1; if i < args.len() { fields = parse_range(&args[i]); } }
-                'c' => { i += 1; if i < args.len() { chars = parse_range(&args[i]); } }
-                'b' => { i += 1; if i < args.len() { bytes = parse_range(&args[i]); } }
+                'd' => {
+                    if j + 1 < chars_vec.len() {
+                        delim = chars_vec[j + 1] as u8;
+                        break;
+                    } else {
+                        i += 1;
+                        if i < args.len() { delim = args[i].as_bytes()[0]; }
+                    }
+                }
+                'f' => {
+                    if j + 1 < chars_vec.len() {
+                        let val: String = chars_vec[j + 1..].iter().collect();
+                        fields = parse_range(&val);
+                        break;
+                    } else {
+                        i += 1;
+                        if i < args.len() { fields = parse_range(&args[i]); }
+                    }
+                }
+                'c' => {
+                    if j + 1 < chars_vec.len() {
+                        let val: String = chars_vec[j + 1..].iter().collect();
+                        chars = parse_range(&val);
+                        break;
+                    } else {
+                        i += 1;
+                        if i < args.len() { chars = parse_range(&args[i]); }
+                    }
+                }
+                'b' => {
+                    if j + 1 < chars_vec.len() {
+                        let val: String = chars_vec[j + 1..].iter().collect();
+                        bytes = parse_range(&val);
+                        break;
+                    } else {
+                        i += 1;
+                        if i < args.len() { bytes = parse_range(&args[i]); }
+                    }
+                }
                 _ => { eprintln!("cut: invalid option -- '{}'", c); std::process::exit(1); }
             }
+            j += 1;
         }
         i += 1;
     }

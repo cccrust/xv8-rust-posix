@@ -100,6 +100,19 @@ fn main() {
         exit(if Path::new(&test_args[1]).is_dir() { 0 } else { 1 });
     }
 
+    // -r PATH (readable)
+    if test_args.len() == 2 && test_args[0] == "-r" {
+        exit(if Path::new(&test_args[1]).exists() &&
+            std::fs::File::open(&test_args[1]).is_ok() { 0 } else { 1 });
+    }
+
+    // -w PATH (writable)
+    if test_args.len() == 2 && test_args[0] == "-w" {
+        exit(if let Ok(m) = std::fs::metadata(&test_args[1]) {
+            if m.permissions().readonly() { 1 } else { 0 }
+        } else { 1 });
+    }
+
     // ! EXPR
     if test_args.len() >= 2 && test_args[0] == "!" {
         // For now, only support ! -f, ! -d, ! -e

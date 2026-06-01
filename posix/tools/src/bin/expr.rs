@@ -1,5 +1,47 @@
+fn expr_substr(s: &str, pos: usize, len: usize) -> String {
+    let chars: Vec<char> = s.chars().collect();
+    if pos == 0 || pos > chars.len() {
+        return String::new();
+    }
+    let start = pos - 1;
+    let end = (start + len).min(chars.len());
+    chars[start..end].iter().collect()
+}
+
+fn expr_index(s: &str, chars_to_find: &str) -> usize {
+    for (i, c) in s.chars().enumerate() {
+        if chars_to_find.contains(c) {
+            return i + 1;
+        }
+    }
+    0
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 3 && args[1] == "length" {
+        println!("{}", args[2].len());
+        return;
+    }
+    if args.len() >= 5 && args[1] == "substr" {
+        let s = &args[2];
+        let pos: usize = args[3].parse().unwrap_or(1);
+        let len: usize = args[4].parse().unwrap_or(1);
+        let result = expr_substr(s, pos, len);
+        println!("{}", result);
+        if result.is_empty() {
+            std::process::exit(1);
+        }
+        return;
+    }
+    if args.len() >= 4 && args[1] == "index" {
+        let result = expr_index(&args[2], &args[3]);
+        println!("{}", result);
+        if result == 0 {
+            std::process::exit(1);
+        }
+        return;
+    }
     if args.len() < 4 {
         eprintln!("Usage: expr <operand> <operator> <operand> [...]");
         std::process::exit(1);
