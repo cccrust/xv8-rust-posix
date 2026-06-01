@@ -1,0 +1,28 @@
+[package]
+name = "tools"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "ping"
+path = "src/bin/ping.rs"
+
+[[bin]]
+name = "host"
+path = "src/bin/host.rs"
+
+[[bin]]
+name = "dns"
+path = "src/bin/dns.rs"
+
+[[bin]]
+name = "tcpclient"
+path = "src/bin/tcpclient.rs"
+
+[[bin]]
+name = "tcpserver"
+path = "src/bin/tcpserver.rs"
+
+[dependencies]
+libnet = { path = "../libnet" }
+fastrand = "2"
