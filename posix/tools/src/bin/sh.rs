@@ -66,7 +66,7 @@ fn main() {
 fn repl(args: &[String]) {
     let mut input = String::new();
     loop {
-        print!("$ ");
+        print!("posix> ");
         io::stdout().flush().ok();
         input.clear();
         if io::stdin().read_line(&mut input).ok().is_none_or(|n| n == 0) {

@@ -35,6 +35,31 @@ path = "src/bin/ntp.rs"
 name = "whois"
 path = "src/bin/whois.rs"
 
+[[bin]]
+name = "netstat"
+path = "src/bin/netstat.rs"
+
+[[bin]]
+name = "http_server"
+path = "src/bin/http_server.rs"
+
+[[bin]]
+name = "curl"
+path = "src/bin/curl.rs"
+
+[[bin]]
+name = "ssh_client"
+path = "src/bin/ssh_client.rs"
+
+[[bin]]
+name = "ssh_server"
+path = "src/bin/ssh_server.rs"
+
 [dependencies]
 libnet = { path = "../libnet" }
 fastrand = "2"
+tiny_http = "0.12"
+ureq = "2.5"
+ssh2 = "0.9"
+tokio = { version = "1", features = ["full"] }
+hyper = { version = "0.14", features = ["full"] }
