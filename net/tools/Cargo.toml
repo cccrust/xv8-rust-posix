@@ -23,6 +23,18 @@ path = "src/bin/tcpclient.rs"
 name = "tcpserver"
 path = "src/bin/tcpserver.rs"
 
+[[bin]]
+name = "tftp"
+path = "src/bin/tftp.rs"
+
+[[bin]]
+name = "ntp"
+path = "src/bin/ntp.rs"
+
+[[bin]]
+name = "whois"
+path = "src/bin/whois.rs"
+
 [dependencies]
 libnet = { path = "../libnet" }
 fastrand = "2"

@@ -37,31 +37,62 @@ else
     fail "host google.com"
 fi
 
-run_tcp_test() {
-    local name=$1 mode=$2 port=$3 expect=$4
-    cargo run --bin tcpserver $port $mode > /dev/null 2>&1 &
-    local pid=$!
-    sleep 0.3
-    OUT=$(cargo run --bin tcpclient 127.0.0.1 $port "hello" 2>&1 || true)
-    kill $pid 2>/dev/null || true
-    if echo "$OUT" | grep -q "$expect"; then
-        pass "tcpclient $name"
-    else
-        fail "tcpclient $name"
-    fi
-}
+echo ""
+echo "=== net: NTP test ==="
+OUT=$(cargo run --bin ntp pool.ntp.org 2>&1)
+if echo "$OUT" | grep -q "Stratum"; then
+    pass "ntp pool.ntp.org"
+else
+    fail "ntp pool.ntp.org"
+fi
+
+echo ""
+echo "=== net: WHOIS test ==="
+OUT=$(cargo run --bin whois google.com 2>&1)
+if echo "$OUT" | grep -q "Domain Name"; then
+    pass "whois google.com"
+else
+    fail "whois google.com"
+fi
 
 echo ""
 echo "=== net: TCP echo test ==="
-run_tcp_test "echo" "--echo" 19991 "Received 5 bytes"
+cargo run --bin tcpserver 19991 --echo > /dev/null 2>&1 &
+SERVER_PID=$!
+sleep 0.3
+OUT=$(cargo run --bin tcpclient 127.0.0.1 19991 "hello" 2>&1 || true)
+kill $SERVER_PID 2>/dev/null || true
+if echo "$OUT" | grep -q "Received 5 bytes"; then
+    pass "tcpclient echo"
+else
+    fail "tcpclient echo"
+fi
 
 echo ""
 echo "=== net: TCP daytime test ==="
-run_tcp_test "daytime" "--daytime" 19992 "T"
+cargo run --bin tcpserver 19992 --daytime > /dev/null 2>&1 &
+SERVER_PID=$!
+sleep 0.3
+OUT=$(cargo run --bin tcpclient 127.0.0.1 19992 "hello" 2>&1 || true)
+kill $SERVER_PID 2>/dev/null || true
+if echo "$OUT" | grep -q "T"; then
+    pass "tcpclient daytime"
+else
+    fail "tcpclient daytime"
+fi
 
 echo ""
 echo "=== net: TCP time test ==="
-run_tcp_test "time" "--time" 19993 "[0-9]"
+cargo run --bin tcpserver 19993 --time > /dev/null 2>&1 &
+SERVER_PID=$!
+sleep 0.3
+OUT=$(cargo run --bin tcpclient 127.0.0.1 19993 "hello" 2>&1 || true)
+kill $SERVER_PID 2>/dev/null || true
+if echo "$OUT" | grep -qE "[0-9]{7,}"; then
+    pass "tcpclient time"
+else
+    fail "tcpclient time"
+fi
 
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
