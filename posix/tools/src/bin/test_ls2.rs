@@ -1,3 +1,6 @@
+#[cfg(not(target_arch = "riscv64"))]
+use std::os::unix::fs::MetadataExt;
+
 fn main() {
     // Use std::fs just like test_ls
     use std::fs;

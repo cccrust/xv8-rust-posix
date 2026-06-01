@@ -5,6 +5,7 @@ pub mod args;
 
 pub use raw::{read, write, open, close, lseek, fstat, exit, getpid, chdir, sbrk, Stat, isatty, mkdir};
 pub use raw::{fork, exec, dup, dup2, pipe, wait, readlink, getenv, setenv, unsetenv, clearenv};
+pub use raw::{unlink, link, rename, chmod, fchmod, chown, fchown, access, symlink, truncate, ftruncate, getuid, getgid};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fd(usize);

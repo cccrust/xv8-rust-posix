@@ -1,0 +1,107 @@
+#!/usr/bin/env expect -f
+# QEMU xv8 integration tests - focused test of new syscall wrappers
+set timeout 60
+set PASS 0
+set FAIL 0
+
+proc expect_prompt {} {
+    expect {
+        -re {\\$ } {}
+        timeout { puts "TIMEOUT waiting for prompt"; exit 1 }
+    }
+}
+
+set test_commands {
+    {echo hello}                           {hello}
+    {true && echo YES_TRUE}                 {YES_TRUE}
+    {false || echo YES_FALSE}              {YES_FALSE}
+    {ls / | head -5}                       {LICENSE}
+    {ls -la / | head -3}                   {rw}
+    {mkdir /my_test && test -d /my_test}   {0}
+    {touch /my_file && test -f /my_file}   {0}
+    {rm /my_file && echo RMOK}             {RMOK}
+    {echo cpdata > /cp_src && cp /cp_src /cp_dst && cat /cp_dst} {cpdata}
+    {echo mvdata > /mv_src && mv /mv_src /mv_dst && cat /mv_dst} {mvdata}
+    {chmod 644 /LICENSE && echo CHMODOK}   {CHMODOK}
+    {wc -l /LICENSE | tr -d ' '}           {21}
+    {head -n 3 /LICENSE | head -1}         {MIT}
+    {grep MIT /LICENSE}                    {MIT}
+    {echo hellopipe | cat | wc -c | tr -d ' '} {10}
+    {echo 'redir' > /r_f && cat /r_f}      {redir}
+    {printenv PATH}                        {/bin}
+    {whoami}                               {root}
+    {uname}                                {xv8}
+    {du / | head -1}                       {/}
+}
+
+spawn sh -c "cd xv8 && cargo run --release 2>/dev/null"
+# Wait for shell prompt
+expect_prompt
+
+foreach cmd_expected $test_commands {
+    lassign $cmd_expected cmd expected
+    send "$cmd\r"
+    expect_prompt
+    # Now capture the output - look for expected in the accumulated output
+    # We need a different approach since expect consumes the output
+}
+
+# Different approach: capture output between prompts
+proc run_test {name cmd expected} {
+    global PASS FAIL
+    send "$cmd\r"
+    expect {
+        -re "\n(.*)\r\n\\$ " {
+            set output $expect_out(1,string)
+            if {[string match "*$expected*" $output]} {
+                puts "  PASS: $name"
+                incr PASS
+            } else {
+                puts "  FAIL: $name (got '$output', expected '$expected')"
+                incr FAIL
+            }
+        }
+        timeout {
+            puts "  FAIL: $name (timeout)"
+            incr FAIL
+        }
+    }
+}
+
+# Re-run tests with the proper function
+puts "\n=== xv8 Integration Tests ===\n"
+
+run_test "echo"        "echo hello"                      "hello"
+run_test "true"        "true && echo OK_T"                "OK_T"
+run_test "false"       "false || echo OK_F"               "OK_F"
+run_test "ls /"        "ls /"                              "LICENSE"
+run_test "ls -la mode" "ls -la /LICENSE"                  "rw"
+run_test "mkdir"       "mkdir /ztest_dir && ls / | grep ztest_dir"  "ztest_dir"
+run_test "touch"       "touch /ztest_f && ls / | grep ztest_f"      "ztest_f"
+run_test "rm"          "rm /ztest_f && echo RMOK"         "RMOK"
+run_test "rmdir"       "rmdir /ztest_dir && echo RMDIROK" "RMDIROK"
+run_test "cp"          "echo cpdat > /cp_a && cp /cp_a /cp_b && cat /cp_b"  "cpdat"
+run_test "mv"          "echo mvdat > /mv_a && mv /mv_a /mv_b && cat /mv_b"  "mvdat"
+run_test "wc"          "wc -l /LICENSE"                   "21"
+run_test "head"        "head -n 1 /LICENSE"               "MIT"
+run_test "grep"        "grep MIT /LICENSE"                "MIT"
+run_test "pipe chain"  "echo px | cat | wc -c"            "3"
+run_test "redirect >"  "echo rdat > /rd && cat /rd"       "rdat"
+run_test "redirect >>" "echo l1 > /ap; echo l2 >> /ap; wc -l /ap"  "2"
+run_test "printenv"    "printenv PATH"                    "/bin"
+run_test "env"         "env"                              "PATH"
+run_test "whoami"      "whoami"                           "root"
+run_test "uname"       "uname"                            "xv8"
+run_test "du"          "du / | head -3"                   "/"
+run_test "chmod"       "touch /zmod; chmod 600 /zmod; ls -l /zmod"  "rw-------"
+run_test "ln"          "echo lndat > /ln_o; ln /ln_o /ln_h; cat /ln_h"  "lndat"
+
+send "exit\r"
+expect eof
+
+puts ""
+puts "=== Results ==="
+puts "PASS: $PASS"
+puts "FAIL: $FAIL"
+puts "Total: [expr {$PASS + $FAIL}]"
+exit [expr {$FAIL > 0}]

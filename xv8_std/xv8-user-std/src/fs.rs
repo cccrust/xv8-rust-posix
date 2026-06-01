@@ -173,24 +173,51 @@ pub fn create_dir<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<()>
     if ret < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
 
-pub fn remove_file<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn remove_file<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<()> {
+    let path_str = path.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let ret = xv8_libc::unlink(c_path.as_ptr() as *const u8);
+    if ret < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
 
-pub fn remove_dir<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn remove_dir<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<()> {
+    let path_str = path.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let ret = xv8_libc::unlink(c_path.as_ptr() as *const u8);
+    if ret < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
 
-pub fn rename<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(_from: P, _to: Q) -> super::io::Result<()> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn rename<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(from: P, to: Q) -> super::io::Result<()> {
+    let from_str = from.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let to_str = to.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let c_from = CString::new(from_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let c_to = CString::new(to_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let ret = xv8_libc::rename(c_from.as_ptr() as *const u8, c_to.as_ptr() as *const u8);
+    if ret < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
 
-pub fn copy<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(_from: P, _to: Q) -> super::io::Result<u64> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn copy<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(from: P, to: Q) -> super::io::Result<u64> {
+    use super::io::{Read, Write};
+    let mut src = File::open(from)?;
+    let mut dst = File::create(to)?;
+    let mut buf = [0u8; 4096];
+    let mut total = 0u64;
+    loop {
+        let n = src.read(&mut buf)?;
+        if n == 0 { break; }
+        dst.write_all(&buf[..n])?;
+        total += n as u64;
+    }
+    Ok(total)
 }
 
-pub fn hard_link<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(_from: P, _to: Q) -> super::io::Result<()> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn hard_link<P: AsRef<super::path::Path>, Q: AsRef<super::path::Path>>(from: P, to: Q) -> super::io::Result<()> {
+    let from_str = from.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let to_str = to.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let c_from = CString::new(from_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let c_to = CString::new(to_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let ret = xv8_libc::link(c_from.as_ptr() as *const u8, c_to.as_ptr() as *const u8);
+    if ret < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
 
 pub fn metadata<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<Metadata> {
@@ -222,12 +249,30 @@ pub fn symlink_metadata<P: AsRef<super::path::Path>>(path: P) -> super::io::Resu
     metadata(path)
 }
 
-pub fn set_permissions<P: AsRef<super::path::Path>>(_path: P, _perm: Permissions) -> super::io::Result<()> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn set_permissions<P: AsRef<super::path::Path>>(path: P, perm: Permissions) -> super::io::Result<()> {
+    let path_str = path.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let c_path = CString::new(path_str).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+    let ret = xv8_libc::chmod(c_path.as_ptr() as *const u8, perm.mode as usize);
+    if ret < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
 
-pub fn create_dir_all<P: AsRef<super::path::Path>>(_path: P) -> super::io::Result<()> {
-    Err(super::io::ErrorKind::Unsupported.into())
+pub fn create_dir_all<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<()> {
+    let path_str = path.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    if path_str.is_empty() || path_str == "/" { return Ok(()); }
+    let mut accum = String::new();
+    for component in path_str.split('/') {
+        if component.is_empty() { continue; }
+        accum.push('/');
+        accum.push_str(component);
+        let c_path = CString::new(accum.as_str()).map_err(|_| super::io::ErrorKind::InvalidInput)?;
+        let ret = xv8_libc::mkdir(c_path.as_ptr() as *const u8, 0o755);
+        if ret < 0 {
+            let err = (-ret) as u16;
+            if err == 17 { continue; } // AlreadyExists (EEXIST)
+            return Err(super::io::ErrorKind::Other.into());
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy)]

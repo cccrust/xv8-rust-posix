@@ -25,6 +25,28 @@ pub enum Syscall {
     Clearenv = 106,
     Sbrk = 12,
     Isatty = 59,
+    Unlink = 18,
+    Link = 19,
+    Chmod = 31,
+    Fchmod = 32,
+    Chown = 33,
+    Fchown = 34,
+    Access = 35,
+    Rename = 36,
+    Symlink = 44,
+    Truncate = 29,
+    Ftruncate = 30,
+    Mknod = 17,
+    Ioctl = 23,
+    Kill = 6,
+    Sleep = 13,
+    Uptime = 14,
+    Getuid = 38,
+    Geteuid = 39,
+    Getgid = 40,
+    Getegid = 41,
+    Umask = 37,
+    Time = 66,
 }
 
 #[inline(always)]
@@ -160,6 +182,58 @@ pub fn sbrk(n: isize) -> isize {
 
 pub fn isatty(fd: usize) -> isize {
     syscall1(Syscall::Isatty, fd)
+}
+
+pub fn unlink(path: *const u8) -> isize {
+    syscall1(Syscall::Unlink, path as usize)
+}
+
+pub fn link(old: *const u8, new: *const u8) -> isize {
+    syscall2(Syscall::Link, old as usize, new as usize)
+}
+
+pub fn rename(old: *const u8, new: *const u8) -> isize {
+    syscall2(Syscall::Rename, old as usize, new as usize)
+}
+
+pub fn chmod(path: *const u8, mode: usize) -> isize {
+    syscall2(Syscall::Chmod, path as usize, mode)
+}
+
+pub fn fchmod(fd: usize, mode: usize) -> isize {
+    syscall2(Syscall::Fchmod, fd, mode)
+}
+
+pub fn chown(path: *const u8, uid: usize, gid: usize) -> isize {
+    syscall3(Syscall::Chown, path as usize, uid, gid)
+}
+
+pub fn fchown(fd: usize, uid: usize, gid: usize) -> isize {
+    syscall3(Syscall::Fchown, fd, uid, gid)
+}
+
+pub fn access(path: *const u8, mode: usize) -> isize {
+    syscall2(Syscall::Access, path as usize, mode)
+}
+
+pub fn symlink(target: *const u8, linkpath: *const u8) -> isize {
+    syscall2(Syscall::Symlink, target as usize, linkpath as usize)
+}
+
+pub fn truncate(path: *const u8, length: usize) -> isize {
+    syscall2(Syscall::Truncate, path as usize, length)
+}
+
+pub fn ftruncate(fd: usize, length: usize) -> isize {
+    syscall2(Syscall::Ftruncate, fd, length)
+}
+
+pub fn getuid() -> isize {
+    syscall1(Syscall::Getuid, 0)
+}
+
+pub fn getgid() -> isize {
+    syscall1(Syscall::Getgid, 0)
 }
 
 #[repr(C)]

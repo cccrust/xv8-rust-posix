@@ -1,0 +1,127 @@
+#!/usr/bin/env expect -f
+# QEMU xv8 integration test using expect
+set timeout 60
+set PASS 0
+set FAIL 0
+
+proc test {name cmd expect_re} {
+    global PASS FAIL
+    
+    send "$cmd\r"
+    expect {
+        -re $expect_re {
+            puts "PASS: $name"
+            set PASS [expr {$PASS + 1}]
+        }
+        timeout {
+            puts "FAIL: $name (timeout waiting for '$expect_re')"
+            set FAIL [expr {$FAIL + 1}]
+        }
+    }
+}
+
+proc test_nowait {name cmd expect_re} {
+    global PASS FAIL
+    
+    send "$cmd\r"
+    expect {
+        -re $expect_re {
+            puts "PASS: $name"
+            set PASS [expr {$PASS + 1}]
+        }
+        timeout {
+            puts "FAIL: $name (timeout waiting for '$expect_re')"
+            set FAIL [expr {$FAIL + 1}]
+        }
+    }
+}
+
+spawn sh -c "cd xv8 && cargo run --release 2>/dev/null"
+
+# Wait for shell prompt
+expect -re {^.*\$ } {}
+
+# ── Basic Commands ───────────────────────────────────────────────────
+test "echo hello" {echo hello} {hello}
+
+test "true" {true && echo OK} {OK}
+test "false" {false || echo OK} {OK}
+
+# ── ls ───────────────────────────────────────────────────────────────
+test "ls /" {ls /} {LICENSE}
+test "ls -la /" {ls -la /} {rw-r--r--}
+test "ls -la directory marker" {ls -la /usr} {d}
+test "ls mkdir" {mkdir /x_testdir; ls / | grep x_testdir} {x_testdir}
+
+# ── mkdir / rmdir ────────────────────────────────────────────────────
+test "mkdir" {mkdir /foo_dir; ls / | grep foo_dir} {foo_dir}
+test "rmdir" {rmdir /foo_dir; ls / | grep -c foo_dir} {0}
+
+# ── touch / rm ───────────────────────────────────────────────────────
+test "touch" {touch /bar_file; ls / | grep bar_file} {bar_file}
+test "rm" {rm /bar_file; ls / | grep -c bar_file} {0}
+
+# ── cp ───────────────────────────────────────────────────────────────
+send "echo cpdata > /cp_src\r"
+expect -re {\$ }
+send "cp /cp_src /cp_dst\r"
+expect -re {\$ }
+test "cp" {cat /cp_dst} {cpdata}
+
+# ── mv ───────────────────────────────────────────────────────────────
+send "echo mvdata > /mv_src\r"
+expect -re {\$ }
+send "mv /mv_src /mv_dst\r"
+expect -re {\$ }
+test "mv" {cat /mv_dst} {mvdata}
+test "mv removed" {ls / | grep -c mv_src} {0}
+
+# ── chmod ────────────────────────────────────────────────────────────
+send "touch /cm_file\r"
+expect -re {\$ }
+send "chmod 600 /cm_file\r"
+expect -re {\$ }
+test "chmod" {ls -l /cm_file} {rw-------}
+
+# ── text processing ─────────────────────────────────────────────────
+test "cat LICENSE" {cat /LICENSE | head -1} {MIT}
+test "wc -l" {wc -l /LICENSE} {21}
+test "head -n 3" {head -n 3 /LICENSE} {MIT}
+test "tail" {tail -n 1 /LICENSE} {Permission}
+test "sort" {printf 'b\na\nc\n' | sort | head -1} {a}
+test "uniq" {printf 'a\na\nb\n' | uniq} {a}
+
+# ── grep ────────────────────────────────────────────────────────────
+test "grep" {grep MIT /LICENSE} {MIT}
+
+# ── pipes / redirects ───────────────────────────────────────────────
+test "pipe" {echo hello | cat | wc -c} {6}
+test "redirect >" {echo 'write test' > /r_test; cat /r_test} {write test}
+test "redirect >>" {echo line1 > /a_test; echo line2 >> /a_test; wc -l /a_test} {2}
+
+# ── env vars ────────────────────────────────────────────────────────
+test "printenv PATH" {printenv PATH} {/bin}
+test "env" {env | grep PATH} {/bin}
+
+# ── test ────────────────────────────────────────────────────────────
+test "test -e" {test -e /LICENSE && echo yes} {yes}
+test "test -d" {test -d / && echo yes} {yes}
+test "test -f" {test -f /LICENSE && echo yes} {yes}
+
+# ── system info ─────────────────────────────────────────────────────
+test "uname" {uname} {xv8}
+test "whoami" {whoami} {root}
+
+# ── du ──────────────────────────────────────────────────────────────
+test "du" {du / | head -5} {/}
+
+# ── Result ──────────────────────────────────────────────────────────
+send "exit\r"
+expect eof
+
+puts ""
+puts "=== xv8 Test Results ==="
+puts "PASS: $PASS"
+puts "FAIL: $FAIL"
+puts "Total: [expr {$PASS + $FAIL}]"
+exit [expr {$FAIL > 0}]

@@ -28,6 +28,11 @@ impl PermissionsExt for fs::Permissions {
     fn set_mode(&mut self, mode: u32) { self.mode = mode; }
 }
 
-pub fn symlink<P: AsRef<crate::path::Path>, Q: AsRef<crate::path::Path>>(_src: P, _dst: Q) -> crate::io::Result<()> {
-    Err(crate::io::ErrorKind::Unsupported.into())
+pub fn symlink<P: AsRef<crate::path::Path>, Q: AsRef<crate::path::Path>>(src: P, dst: Q) -> crate::io::Result<()> {
+    let src_str = src.as_ref().to_str().ok_or(crate::io::ErrorKind::InvalidInput)?;
+    let dst_str = dst.as_ref().to_str().ok_or(crate::io::ErrorKind::InvalidInput)?;
+    let c_src = crate::ffi::CString::new(src_str).map_err(|_| crate::io::ErrorKind::InvalidInput)?;
+    let c_dst = crate::ffi::CString::new(dst_str).map_err(|_| crate::io::ErrorKind::InvalidInput)?;
+    let ret = xv8_libc::symlink(c_src.as_ptr() as *const u8, c_dst.as_ptr() as *const u8);
+    if ret < 0 { Err(crate::io::ErrorKind::Other.into()) } else { Ok(()) }
 }
