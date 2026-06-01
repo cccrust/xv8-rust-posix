@@ -1,6 +1,4 @@
 use std::env;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::str::FromStr;
 use std::process::exit;
 
 fn main() {
@@ -118,40 +116,40 @@ fn print_connections(path: &str, is_ipv6: bool) {
 }
 
 #[cfg(target_os = "linux")]
-fn parse_socket_addr(addr: &str, is_ipv6: bool) -> SocketAddr {
+fn parse_socket_addr(addr: &str, is_ipv6: bool) -> std::net::SocketAddr {
     if is_ipv6 {
         // Format: [hex ipv6 address]:[hex port]
         if addr.len() < 34 { // [0-9a-f]{32}:[0-9a-f]{4}
-            return SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0);
+            return std::net::SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED), 0);
         }
         let ip_hex = &addr[0..32];
         let port_hex = &addr[33..37]; // Skip the colon at index 32
 
-        let ipv6 = Ipv6Addr::from(
+        let ipv6 = std::net::Ipv6Addr::from(
             u128::from_str_radix(ip_hex, 16).unwrap_or(0)
         );
         let port = u16::from_str_radix(port_hex, 16).unwrap_or(0);
-        SocketAddr::new(IpAddr::V6(ipv6), port)
+        std::net::SocketAddr::new(std::net::IpAddr::V6(ipv6), port)
     } else {
         // Format: [hex ipv4 address]:[hex port]
         if addr.len() < 12 { // [0-9a-f]{8}:[0-9a-f]{4}
-            return SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0);
+            return std::net::SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), 0);
         }
         let ip_hex = &addr[0..8];
         let port_hex = &addr[9..13]; // Skip the colon at index 8
 
-        let ipv4 = Ipv4Addr::from(
+        let ipv4 = std::net::Ipv4Addr::from(
             u32::from_str_radix(ip_hex, 16).unwrap_or(0)
         );
         let port = u16::from_str_radix(port_hex, 16).unwrap_or(0);
-        SocketAddr::new(IpAddr::V4(ipv4), port)
+        std::net::SocketAddr::new(std::net::IpAddr::V4(ipv4), port)
     }
 }
 
 #[cfg(target_os = "linux")]
-fn format_socket(addr: &SocketAddr) -> String {
+fn format_socket(addr: &std::net::SocketAddr) -> String {
     match addr {
-        SocketAddr::V4(ref v4) => format!("{}:{}", v4.ip(), v4.port()),
-        SocketAddr::V6(ref v6) => format!("[{}]:{}", v6.ip(), v6.port()),
+        std::net::SocketAddr::V4(ref v4) => format!("{}:{}", v4.ip(), v4.port()),
+        std::net::SocketAddr::V6(ref v6) => format!("[{}]:{}", v6.ip(), v6.port()),
     }
 }
