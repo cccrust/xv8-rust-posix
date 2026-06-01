@@ -109,7 +109,7 @@ fn main() {
     // -w PATH (writable)
     if test_args.len() == 2 && test_args[0] == "-w" {
         exit(if let Ok(m) = std::fs::metadata(&test_args[1]) {
-            if m.permissions().readonly() { 1 } else { 0 }
+            if is_readonly(&m.permissions()) { 1 } else { 0 }
         } else { 1 });
     }
 
@@ -144,4 +144,9 @@ fn main() {
     // Unknown expression
     eprintln!("test: unknown expression");
     exit(2);
+}
+
+fn is_readonly(perm: &std::fs::Permissions) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    perm.mode() & 0o222 == 0
 }

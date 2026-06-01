@@ -197,5 +197,12 @@ test = false
 doctest = false
 bench = false
 
+[[bin]]
+name = "_neteth"
+path = "testbin/neteth.rs"
+test = false
+doctest = false
+bench = false
+
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
