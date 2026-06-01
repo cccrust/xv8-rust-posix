@@ -283,7 +283,7 @@ impl<'a> Parser<'a> {
                     cmd = CommandType::Redirect {
                         cmd: inner,
                         file,
-                        mode: OpenFlag::WRITE_ONLY | OpenFlag::CREATE,
+                        mode: OpenFlag::WRITE_ONLY | OpenFlag::CREATE | OpenFlag::APPEND,
                         fd: Fd::STDOUT,
                     };
                 }
@@ -322,8 +322,8 @@ fn run_cmd(cmd: CommandType, arena: &mut Arena) -> ! {
             fd,
         } => {
             close(fd).unwrap();
-            if open(file, mode).is_err() {
-                eprintln!("sh: cannot open {}", file);
+            if let Err(e) = open(file, mode) {
+                eprintln!("sh: cannot open {}: {}", file, e);
                 exit(1);
             }
 

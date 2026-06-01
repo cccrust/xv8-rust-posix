@@ -1,5 +1,6 @@
 use crate::net::ipv4::Ipv4Proto;
-use crate::net::{self, Be, Ipv4Addr, NetError, NetworkHeader};
+use crate::net::{self, Be, Ipv4Addr, NetError};
+use crate::net::NetworkHeader;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
@@ -108,10 +109,10 @@ pub fn handle_icmp(dest_ip: Ipv4Addr, req_data: &[u8]) -> Result<(), NetError> {
             IcmpType::EchoRequest => {
                 log!(echo_reply(dest_ip, req_icmp, req_data))
             }
-            IcmpType::EchoReply => {
-                let identifier = (req_icmp.rest.get() >> 16) as u16;
-                log!(super::ping::deliver(identifier, dest_ip, req_data))
-            }
+             IcmpType::EchoReply => {
+                 let identifier = (req_icmp.rest.get() >> 16) as u16;
+                 log!(crate::net::ping::PingTable::deliver(identifier, dest_ip, req_data))
+             }
             IcmpType::Unknown => Ok(()),
         }
     } else {

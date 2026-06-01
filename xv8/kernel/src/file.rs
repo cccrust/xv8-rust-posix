@@ -129,17 +129,20 @@ impl File {
             copy
         }; // drop both inner and meta locks
 
-        match inner_copy.r#type {
-            FileType::None => {}
-            FileType::Pipe { pipe } => {
-                pipe.close(inner_copy.writeable);
-            }
-            FileType::Inode { inode } | FileType::Device { inode, .. } => {
-                let _op = Operation::begin();
-                inode.put();
-            }
-            FileType::Socket { socket_id } => SocketTable::close(socket_id),
-        }
+         match inner_copy.r#type {
+             FileType::None => {}
+             FileType::Pipe { pipe } => {
+                 pipe.close(inner_copy.writeable);
+             }
+             FileType::Inode { inode } | FileType::Device { inode, .. } => {
+                 let _op = Operation::begin();
+                 inode.put();
+             }
+             FileType::Socket { socket_id } => SocketTable::close(socket_id),
+             FileType::Ping { socket_id } => {
+                 crate::net::ping::PingTable::close(socket_id);
+             }
+         }
     }
 
     /// Gets metadata about file.
@@ -207,6 +210,9 @@ impl File {
                 // reads from socket should go through recv()
                 err!(SysError::BadDescriptor);
             }
+            FileType::Ping { socket_id: _ } => {
+                err!(SysError::BadDescriptor);
+            }
         }
     }
 
@@ -272,6 +278,9 @@ impl File {
                 // writes to socket should go through send()
                 err!(SysError::InvalidArgument);
             }
+            FileType::Ping { socket_id: _ } => {
+                err!(SysError::InvalidArgument);
+            }
         }
     }
 
@@ -299,10 +308,10 @@ impl File {
     pub fn lseek(&self, offset: isize, whence: usize) -> Result<isize, SysError> {
         let mut file_inner = FILE_TABLE.inner[self.id].lock();
 
-        match &file_inner.r#type {
-            FileType::None => err!(SysError::BadDescriptor),
-            FileType::Pipe { .. } | FileType::Socket { .. } => err!(SysError::IsDirectory),
-            FileType::Inode { .. } | FileType::Device { .. } => {
+         match &file_inner.r#type {
+             FileType::None => err!(SysError::BadDescriptor),
+             FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } => err!(SysError::IsDirectory),
+             FileType::Inode { .. } | FileType::Device { .. } => {
                 let new_offset = match whence {
                     0 => { // SEEK_SET
                         if offset < 0 {

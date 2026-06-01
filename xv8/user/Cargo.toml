@@ -130,6 +130,10 @@ bench = false
 [[bin]]
 name = "dns"
 path = "bin/dns.rs"
+
+[[bin]]
+name = "traceroute"
+path = "bin/traceroute.rs"
 test = false
 doctest = false
 bench = false
@@ -220,3 +224,4 @@ bench = false
 
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
+

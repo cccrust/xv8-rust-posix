@@ -1,5 +1,7 @@
 use crate::net::ipv4::Ipv4Proto;
-use crate::net::{self, Be, IcmpHeader, Ipv4Addr, NetError};
+use crate::net::{self, Be, Ipv4Addr, NetError};
+use crate::net::NetworkHeader;
+use crate::net::icmp::IcmpHeader;
 use crate::param::NPING;
 use crate::proc::{self, Channel};
 use crate::spinlock::SpinLock;

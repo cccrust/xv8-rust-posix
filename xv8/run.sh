@@ -1,1 +1,5 @@
-cargo build --release && ./mkfs.sh && cargo run --release
+set -x
+cargo build --release
+./mkfs.sh
+# ./setup_net.sh
+cargo run --release
