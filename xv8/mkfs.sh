@@ -13,6 +13,7 @@ posix_bins=$(find ../posix/target/riscv64gc-unknown-none-elf/release -maxdepth 1
 # We use full path so mkfs adds them with correct names (/init, /poweroff, etc.)
 user_bins="
 target/riscv64gc-unknown-none-elf/release/demo
+target/riscv64gc-unknown-none-elf/release/dns
 target/riscv64gc-unknown-none-elf/release/init
 target/riscv64gc-unknown-none-elf/release/poweroff
 target/riscv64gc-unknown-none-elf/release/primes

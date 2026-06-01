@@ -64,6 +64,7 @@ pub mod process;
 pub mod time;
 pub mod thread;
 pub mod ffi;
+pub mod net;
 
 pub use alloc::vec::Vec;
 

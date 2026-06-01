@@ -6,6 +6,7 @@ use alloc::boxed::Box;
 use alloc::sync::Arc;
 
 use crate::net::interface::{self, InterfaceConfig, InterfaceId, NetDevice};
+use crate::net::route::{self, RouteEntry, RouteOwner};
 use crate::net::{self, Ipv4Addr, Ipv4Config, MacAddr, NetError};
 use crate::spinlock::SpinLock;
 
@@ -367,7 +368,7 @@ pub unsafe fn init() {
             name: "e1000",
             mac: MacAddr([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
             ipv4: Some(Ipv4Config {
-                addr: Ipv4Addr([192, 168, 10, 2]),
+                addr: Ipv4Addr([10, 0, 2, 15]),
                 prefix_len: 24,
             }),
             is_up: true,
@@ -376,6 +377,16 @@ pub unsafe fn init() {
     );
 
     state.interface_id = Some(interface_id);
+
+    // add a default route to QEMU user-mode gateway
+    route::upsert_route(RouteEntry {
+        dest_ip: Ipv4Addr::UNSPECIFIED,
+        prefix_len: 0,
+        gateway: Some(Ipv4Addr([10, 0, 2, 2])),
+        interface_id,
+        metric: 100,
+        owner: RouteOwner::Dhcp,
+    });
 
     println!("e1000 init");
 }

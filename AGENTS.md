@@ -26,15 +26,16 @@ cargo run --release
 - Processes: 64 process slots, round-robin scheduler, sleep/wakeup
 - Syscalls: fork, exec, wait, exit, open, read, write, pipe, socket, etc.
 - Filesystem: Log-structured with write-ahead logging, inode-based
-- Networking: Ethernet, ARP, IPv4, UDP, DHCP, loopback
-- VirtIO: Block device (disk) and network drivers
+- Networking: Ethernet, ARP, IPv4, UDP, DHCP, loopback, E1000 PCIe NIC
+- VirtIO: Block device (disk)
+- QEMU: User-mode NAT (`-netdev user`) + E1000 (`-device e1000`)
 
 **Kernel Crates:**
 - `xv8` - Kernel crate (package name)
 - `user` - User space library crate
 - `mkfs` - Filesystem image creator
 
-**Tests:** 7 tests (fs, pipe, proc, fd, sbrk, cow, net)
+**Tests:** 9 tests (fs, pipe, proc, fd, sbrk, cow, net, syscall, neteth)
 
 ---
 

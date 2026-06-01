@@ -74,19 +74,20 @@ xv8/
 │   │   ├── init.rs      # First userspace process
 │   │   ├── sh.rs        # Shell
 │   │   ├── cat.rs, ls.rs, echo.rs, etc.
-│   │   └── udp.rs       # UDP test utility
+│   │   ├── udp.rs       # UDP test utility
+│   │   └── dns.rs       # DNS lookup tool
 │   └── testbin/         # Internal test programs
 │       ├── testrunner.rs
-│       ├── fs.rs, pipe.rs, proc.rs, etc.
+│       ├── fs.rs, pipe.rs, proc.rs, neteth.rs, netdns.rs, etc.
 ├── mkfs/                # Filesystem image creator
 │   ├── Cargo.toml
 │   └── src/main.rs
 ├── .cargo/config.toml  # QEMU runner config
 ├── rust-toolchain.toml  # Rust toolchain
 ├── mkfs.sh              # Create fs.img
-├── setup_net.sh         # Setup network interface
-├── run.sh               # Run QEMU
-└── test.sh              # Run tests
+├── setup_net.sh         # Setup tap network interface (legacy)
+├── run.sh               # Run tests in QEMU
+└── test.sh              # Run all tests in QEMU
 ```
 
 ## Build & Run
@@ -113,8 +114,8 @@ cargo run --release
 - **Syscalls**: 107 syscalls including getenv, setenv, unsetenv, clearenv, getpagesize, sigaction, sigprocmask, sigpending, sigsuspend, sigreturn, killpg, setgroups, getgroups, initgroups, pathconf, fpathconf, sysconf, confstr, ttyname, ttyioctl, tcgetsid, tcflow, tcflush, mkfifo, pipe2, setpgid, getsid, setreuid, setregid, setresuid, setresgid, getresuid, getresgid, readv, writev, pread, pwrite, time, nanosleep, clock_gettime, mmap, munmap, mprotect, dup2, getppid, setuid, setgid, getpgid, isatty, etc.
 - **Syscalls**: fork, exec, wait, exit, open, read, write, pipe, socket, etc.
 - **Filesystem**: Log-structured with write-ahead logging, inode-based
-- **Networking**: Ethernet, ARP, IPv4, UDP, DHCP, loopback
-- **VirtIO**: Block device (disk) and network drivers
+- **Networking**: Ethernet, ARP, IPv4, UDP, DHCP, loopback, E1000 PCIe NIC (verified with QEMU user-mode NAT)
+- **VirtIO**: Block device (disk)
 - **Shell**: Pipes, redirections, background jobs, line editor with history
 
 ## Crate Names
@@ -129,12 +130,15 @@ cargo run --release
 - CPU: max
 - Memory: 256M
 - SMP: 4 cores
-- Network: virtio-mmio with UDP support
+- Network: QEMU user-mode NAT (`-netdev user,id=net0 -device e1000,netdev=net0`)
+- E1000 NIC: Intel 82540EM (vendor=0x8086, device=0x100E), MMIO at 0x40000000
 
 ## Tests
 
-8 internal tests: fs, pipe, proc, fd, sbrk, cow, net, syscall
+10 internal tests: fs, pipe, proc, fd, sbrk, cow, net, syscall, neteth, netdns
 
 - `syscall` test covers: dup2, getppid, setuid, setgid, getpgid, isatty, tcgetattr, tcsetattr
+- `neteth` test covers: DHCP wait + UDP send to QEMU gateway (10.0.2.2), loopback echo
+- `netdns` test covers: DHCP wait + DNS A record query to QEMU DNS proxy (10.0.2.3)
 
-All tests pass successfully.
+All 10 tests pass successfully.

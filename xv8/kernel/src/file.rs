@@ -5,6 +5,7 @@ use alloc::sync::Arc;
 use crate::console::Console;
 use crate::fs::{BSIZE, FsError, Inode, Stat};
 use crate::log::Operation;
+use crate::net::ping::PingTable;
 use crate::net::udp::SocketTable;
 use crate::param::{MAXOPBLOCKS, NDEV, NFILE};
 use crate::pipe::Pipe;
@@ -21,6 +22,7 @@ pub enum FileType {
     Inode { inode: Inode },
     Device { inode: Inode, major: u16 },
     Socket { socket_id: usize },
+    Ping { socket_id: usize },
 }
 
 /// File metadata protected by table-wide spinlock

@@ -16,6 +16,7 @@ pub(crate) mod arp;
 pub(crate) mod dhcp;
 pub(crate) mod eth;
 pub(crate) mod icmp;
+pub(crate) mod ping;
 pub(crate) mod interface;
 pub(crate) mod ipv4;
 pub(crate) mod loopback;

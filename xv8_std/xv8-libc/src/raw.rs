@@ -46,6 +46,9 @@ pub enum Syscall {
     Getgid = 40,
     Getegid = 41,
     Umask = 37,
+    Socket = 24,
+    Send = 25,
+    Receive = 26,
     Time = 66,
 }
 
@@ -89,6 +92,55 @@ fn syscall3(syscall: Syscall, a0: usize, a1: usize, a2: usize) -> isize {
         );
     }
     ret
+}
+
+#[inline(always)]
+fn syscall5(syscall: Syscall, a0: usize, a1: usize, a2: usize, a3: usize, a4: usize) -> isize {
+    let ret: isize;
+    unsafe {
+        core::arch::asm!(
+            "ecall",
+            in("a7") syscall as usize,
+            inlateout("a0") a0 as isize => ret,
+            in("a1") a1,
+            in("a2") a2,
+            in("a3") a3,
+            in("a4") a4,
+        );
+    }
+    ret
+}
+
+pub fn socket(port: u16) -> isize {
+    syscall1(Syscall::Socket, port as usize)
+}
+
+pub fn send(fd: usize, buf: *const u8, len: usize, dest_ip: *const u8, dest_port: u16) -> isize {
+    syscall5(
+        Syscall::Send,
+        fd,
+        buf as usize,
+        len,
+        dest_ip as usize,
+        dest_port as usize,
+    )
+}
+
+pub fn receive(
+    fd: usize,
+    buf: *mut u8,
+    len: usize,
+    src_ip: *mut u8,
+    src_port: *mut u16,
+) -> isize {
+    syscall5(
+        Syscall::Receive,
+        fd,
+        buf as usize,
+        len,
+        src_ip as usize,
+        src_port as usize,
+    )
 }
 
 pub fn read(fd: usize, buf: *mut u8, len: usize) -> isize {

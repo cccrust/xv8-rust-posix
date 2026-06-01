@@ -25,13 +25,13 @@ impl From<u8> for IcmpType {
 #[derive(Debug, Clone, Copy)]
 pub struct IcmpHeader {
     /// Type
-    r#type: u8,
+    pub(crate) r#type: u8,
     /// Code
-    code: u8,
+    pub(crate) code: u8,
     /// Checksum
-    sum: Be<u16>,
+    pub(crate) sum: Be<u16>,
     /// Rest of Header (varies by type/code)
-    rest: Be<u32>,
+    pub(crate) rest: Be<u32>,
 }
 
 impl IcmpHeader {
@@ -62,6 +62,28 @@ impl IcmpHeader {
 
 unsafe impl NetworkHeader for IcmpHeader {}
 
+/// Sends an ICMP Echo Request.
+pub fn send_echo_request(
+    dest_ip: Ipv4Addr,
+    identifier: u16,
+    seq: u16,
+    data: &[u8],
+) -> Result<(), NetError> {
+    let rest = ((identifier as u32) << 16) | (seq as u32);
+    let icmp = IcmpHeader {
+        r#type: IcmpType::EchoRequest as u8,
+        code: 0,
+        sum: Be::new(0),
+        rest: Be::new(rest),
+    };
+    let icmp = icmp.add_checksum(data);
+    log!(net::transmit(
+        dest_ip,
+        Ipv4Proto::Icmp,
+        &[icmp.as_bytes(), data]
+    ))
+}
+
 /// Sends an ICMP Echo Reply in response to the given ICMP Echo Request.
 pub fn echo_reply(
     dest_ip: Ipv4Addr,
@@ -86,7 +108,10 @@ pub fn handle_icmp(dest_ip: Ipv4Addr, req_data: &[u8]) -> Result<(), NetError> {
             IcmpType::EchoRequest => {
                 log!(echo_reply(dest_ip, req_icmp, req_data))
             }
-            IcmpType::EchoReply => Ok(()),
+            IcmpType::EchoReply => {
+                let identifier = (req_icmp.rest.get() >> 16) as u16;
+                log!(super::ping::deliver(identifier, dest_ip, req_data))
+            }
             IcmpType::Unknown => Ok(()),
         }
     } else {

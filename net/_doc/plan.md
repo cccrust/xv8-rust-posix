@@ -19,7 +19,7 @@ xv8 QEMU 移植為 v1.0 以後的目標。現行 0.x 版本以主機原生運作
 | v0.1 | 基礎架構 + ping/host/dns | libnet 共用庫 + 3 支 UDP 工具 |
 | v0.2 | TCP 工具 | tcpclient, tcpserver |
 | v0.3 | 進階工具 | tftp, ntp, whois |
-| v1.0 | xv8 移植 | 加入 xv8-libc syscall 後端 + QEMU 驗證 |
+| v1.0 | xv8 移植 | ✅ E1000 + QEMU user-mode UDP 通訊 OK, _neteth 自動測試 |
 
 ## 網路工具範圍
 
