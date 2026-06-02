@@ -43,6 +43,19 @@ posix/
   - Uses `libposix` for shared functionality
   - Depends on `libc` for system calls
 
+## Test
+
+```bash
+# Run all tests
+./test.sh
+
+# Or run individually:
+sh tools/tests/test_sh_basic.sh
+sh tools/tests/test_tools_core.sh
+
+# Both suites: PASS: 33/33 (shell) + PASS: 21/21 (core tools)
+```
+
 ## Build
 
 ```bash

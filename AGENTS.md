@@ -26,6 +26,8 @@ A collection of POSIX-compliant command-line tools implemented in Rust.
 
 **Build:** `cargo build --release`
 
+**Run tests:** `cd posix && ./test.sh` (PASS: 33/33 shell + PASS: 21/21 core tools)
+
 ### xv8_std/ - std library for xv8
 Enable `std` support on xv8 so `posix/tools/` compiles without modification.
 
