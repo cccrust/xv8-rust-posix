@@ -143,6 +143,8 @@ echo "=== 18. Eval ==="
 result=$(eval echo hello world)
 assert_eq "hello world" "$result" "eval echo"
 
+echo "=== 19. Heredoc ==="
+
 echo ""
 echo "========================================"
 echo "Results:  PASS: $PASS  FAIL: $FAIL"

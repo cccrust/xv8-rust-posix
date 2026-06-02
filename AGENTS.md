@@ -1,59 +1,50 @@
 # xv8-rust-posix Workspace
 
-This is a Rust workspace containing three main projects:
+Multi-project Rust workspace (NOT a Cargo workspace at root level). Four subprojects in separate directories.
 
-## Projects
+## Subprojects
 
-### xv8/ - RISC-V Operating System in Rust
-Unix-like OS for RISC-V, inspired by xv6 and derived from octopus.
+| Project | Dir | Type |
+|---------|-----|------|
+| xv8 OS | `xv8/` | RISC-V Unix-like OS (requires nightly + `qemu-system-riscv64`) |
+| POSIX tools | `posix/` | 100+ POSIX utilities + shell |
+| xv8 std | `xv8_std/` | std overlay so POSIX tools compile for riscv64 |
+| Network tools | `net/` | ping, dns, tcp, etc. |
 
-**Location:** `xv8/`
+## Key Commands
 
-**Build & Run:**
 ```bash
-cd xv8
-cargo build --release
-./mkfs.sh
-cargo run --release
+./shell.sh              # Build + launch POSIX shell with net tools (prompt: posix> )
+./test.sh               # Full suite: posix tests + xv8 cross-compile + QEMU integration
+cd xv8   && ./test.sh   # QEMU integration tests only (10 tests, requires qemu-system-riscv64)
+cd posix && ./test.sh   # POSIX shell (33/33) + core tools (21/21) tests
+cd net   && ./test.sh   # Network tools smoke tests
 ```
 
-**Run tests:** `./test.sh`
+## Critical Architecture Notes
 
-### posix/ - POSIX Utilities in Rust
-A collection of POSIX-compliant command-line tools implemented in Rust.
+- **No root Cargo.toml** — each subproject is its own workspace
+- **`.cargo/rustc-wrapper.sh`** — injects `#![no_main]` and `#[no_mangle]` for `src/bin/*.rs` when targeting `riscv64gc-unknown-none-elf`. This is what allows POSIX tools to compile for both host and RISC-V without source changes.
+- **`libc` → `xv8-libc-compat`** — `posix/tools/Cargo.toml` depends on `libc` which resolves to `xv8_std/xv8-libc-compat`. On `riscv64` this provides minimal syscall wrappers; on host it delegates to real `libc`.
+- **Toolchain**: nightly + target `riscv64gc-unknown-none-elf`
+- **QEMU**: qemu-system-riscv64, virt machine, 256M, 4 cores, E1000 NIC, virtio-blk
 
-**Location:** `posix/`
+## xv8 Build Flow
 
-**Build:** `cargo build --release`
-
-**Run tests:** `cd posix && ./test.sh` (PASS: 33/33 shell + PASS: 21/21 core tools)
-
-### xv8_std/ - std library for xv8
-Enable `std` support on xv8 so `posix/tools/` compiles without modification.
-
-**Location:** `xv8_std/`
-
-**Build:**
 ```bash
-cd xv8_std/xv8-libc && cargo build --release
-cd xv8_std/xv8-std-overlay && cargo build --release
+cargo build --release   # kernel + user programs for riscv64
+./mkfs.sh              # creates fs.img with user binaries
+cargo run --release    # runs in QEMU
 ```
 
----
+## Cross-Compilation Gotcha
 
-## Workspace Root
-**Files:**
-- `README.md` - Project overview
-- `LICENSE` - MIT license
-- `.gitignore` - Git ignore rules
-- `shell.sh` - Launch POSIX shell with network tools (see below)
-
-**Note:** This is a multi-project workspace. Each subproject has its own AGENTS.md for detailed information.
-
-### Using the POSIX Shell with Network Tools
-To run the POSIX shell and have access to both the standard POSIX tools and the network tools (ping, host, etc.):
+Always use `--target riscv64gc-unknown-none-elf` for riscv64 builds:
 ```bash
-./shell.sh
+cargo build --release --manifest-path posix/Cargo.toml --target riscv64gc-unknown-none-elf
+cargo build --release --manifest-path xv8_std/Cargo.toml --target riscv64gc-unknown-none-elf
 ```
-This builds the posix/tools and net/tools workspaces, adds their release binaries to PATH, and executes the POSIX shell.
-The shell prompt will be `posix> ` to distinguish it from the system shell.
+
+## Existing Instruction Files
+
+Each subproject has its own `AGENTS.md` with detailed information.

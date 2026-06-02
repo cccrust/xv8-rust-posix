@@ -17,6 +17,7 @@ struct Redirect {
     op: String,
     target: String,
     heredoc_content: Option<String>,
+    heredoc_literal: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -41,6 +42,7 @@ struct ShellContext {
     traps: HashMap<String, String>,
     func_depth: usize,
     shell_options: HashMap<String, bool>,
+    pending_heredocs: HashMap<String, (String, bool)>,
 }
 
 impl ShellContext {
@@ -61,6 +63,7 @@ impl ShellContext {
             traps: HashMap::new(),
             func_depth: 0,
             shell_options: HashMap::new(),
+            pending_heredocs: HashMap::new(),
         };
         ctx.vars.insert("$".to_string(), pid.to_string());
         ctx.vars.insert("?".to_string(), "0".to_string());
@@ -221,6 +224,29 @@ fn tokenize(input: &str) -> Vec<String> {
                             tokens.push("<<<".to_string()); i += 3;
                         } else {
                             tokens.push("<<".to_string()); i += 2;
+                            // Parse heredoc delimiter preserving quotes
+                            while i < chars.len() && (chars[i] == ' ' || chars[i] == '\t') { i += 1; }
+                            if i < chars.len() && (chars[i] == '\'' || chars[i] == '"') {
+                                // Quoted delimiter — preserve quotes
+                                let q = chars[i];
+                                let mut delim = String::new();
+                                delim.push(q);
+                                i += 1;
+                                while i < chars.len() && chars[i] != q {
+                                    match chars[i] {
+                                        '\\' if q == '"' => {
+                                            i += 1;
+                                            if i < chars.len() { delim.push(chars[i]); i += 1; }
+                                        }
+                                        c => { delim.push(c); i += 1; }
+                                    }
+                                }
+                                if i < chars.len() {
+                                    delim.push(chars[i]); // closing quote
+                                    i += 1;
+                                }
+                                tokens.push(delim);
+                            }
                         }
                     } else if i + 1 < chars.len() && chars[i + 1] == '>' {
                         tokens.push("<>".to_string()); i += 2;
@@ -1261,6 +1287,8 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
                 return Some(1);
             }
             ctx.positional.drain(..n);
+            ctx.vars.remove("OPTIND");
+            ctx.vars.remove("_OPTPOS");
             Some(0)
         }
         "unset" => {
@@ -1279,11 +1307,21 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
                     println!("{}='{}'", k, ctx.vars.get(k).unwrap());
                 }
                 Some(0)
+            } else if args[0] == "--" {
+                // set -- ... : set positional parameters (skip --); reset OPTIND
+                ctx.positional = args[1..].to_vec();
+                ctx.vars.remove("OPTIND");
+                ctx.vars.remove("_OPTPOS");
+                Some(0)
             } else if args[0].starts_with('-') || args[0].starts_with('+') {
                 // Handle options: set -e, set +e, set -o option, etc.
                 let mut status = 0;
                 let mut i = 0;
                 while i < args.len() && (args[i].starts_with('-') || args[i].starts_with('+')) {
+                    if args[i] == "--" {
+                        i += 1;
+                        break;
+                    }
                     let enable = args[i].starts_with('-');
                     let chars: Vec<char> = if args[i].len() > 1 { args[i][1..].chars().collect() } else { vec![] };
                     if chars == ['o'] {
@@ -1316,6 +1354,8 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
                         pos.remove(0);
                     }
                     ctx.positional = pos;
+                    ctx.vars.remove("OPTIND");
+                    ctx.vars.remove("_OPTPOS");
                 }
                 Some(status)
             } else {
@@ -1325,6 +1365,8 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
                     pos.remove(0);
                 }
                 ctx.positional = pos;
+                ctx.vars.remove("OPTIND");
+                ctx.vars.remove("_OPTPOS");
                 Some(0)
             }
         }
@@ -1352,6 +1394,126 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
             // Null builtin — does nothing, returns 0
             Some(0)
         }
+        "umask" => {
+            #[cfg(unix)]
+            {
+                if args.is_empty() {
+                    let mask = unsafe { libc::umask(0) };
+                    unsafe { libc::umask(mask); }
+                    println!("{:04o}", mask);
+                    Some(0)
+                } else {
+                    let val = args[0].trim();
+                    let mask_u32 = if val.starts_with('0') {
+                        u32::from_str_radix(val, 8).unwrap_or(0o22)
+                    } else {
+                        val.parse::<u32>().unwrap_or(0o22)
+                    };
+                    let mask = mask_u32 as libc::mode_t;
+                    unsafe { libc::umask(mask); }
+                    Some(0)
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                eprintln!("sh: umask: not supported on this platform");
+                Some(1)
+            }
+        }
+        "getopts" => {
+            if args.len() < 2 {
+                eprintln!("sh: getopts: usage: getopts optstring var [args]");
+                return Some(1);
+            }
+            let optstring = &args[0];
+            let var_name = &args[1];
+            let loop_args: Vec<String> = if args.len() > 2 {
+                args[2..].to_vec()
+            } else {
+                ctx.positional.clone()
+            };
+            let mut optind: usize = ctx.vars.get("OPTIND").and_then(|v| v.parse().ok()).unwrap_or(1);
+            let optpos_key = "_OPTPOS".to_string();
+            // _OPTPOS tracks which character in the current arg to process next (0-based)
+            let mut optpos: usize = ctx.vars.get(&optpos_key).and_then(|v| v.parse().ok()).unwrap_or(0);
+            loop {
+                if optind < 1 || optind > loop_args.len() {
+                    ctx.vars.remove(&optpos_key);
+                    ctx.set_var(var_name, "?");
+                    return Some(1);
+                }
+                let arg = &loop_args[optind - 1];
+                if !arg.starts_with('-') || arg == "-" {
+                    ctx.vars.remove(&optpos_key);
+                    ctx.set_var(var_name, "?");
+                    return Some(1);
+                }
+                if arg == "--" {
+                    ctx.vars.remove(&optpos_key);
+                    optind += 1;
+                    ctx.set_var("OPTIND", &optind.to_string());
+                    ctx.set_var(var_name, "?");
+                    return Some(1);
+                }
+                let opt_chars: Vec<char> = arg[1..].chars().collect();
+                if optpos >= opt_chars.len() {
+                    // Move to next arg
+                    optind += 1;
+                    optpos = 0;
+                    ctx.vars.remove(&optpos_key);
+                    continue;
+                }
+                let opt_char = opt_chars[optpos];
+                optpos += 1;
+                if optpos < opt_chars.len() {
+                    ctx.set_var(&optpos_key, &optpos.to_string());
+                } else {
+                    ctx.vars.remove(&optpos_key);
+                    optind += 1;
+                }
+                // Check if this option is valid and takes an argument
+                let opt_idx = optstring.find(opt_char);
+                if opt_idx.is_none() {
+                    if optstring.starts_with(':') {
+                        ctx.set_var(var_name, "?");
+                        ctx.set_var("OPTARG", &opt_char.to_string());
+                    } else {
+                        eprintln!("sh: getopts: illegal option -- {}", opt_char);
+                        ctx.set_var(var_name, "?");
+                        ctx.set_var("OPTARG", "");
+                    }
+                    ctx.set_var("OPTIND", &optind.to_string());
+                    return Some(0);
+                }
+                let needs_arg = opt_idx.unwrap() + 1 < optstring.len()
+                    && optstring.as_bytes()[opt_idx.unwrap() + 1] == b':';
+                ctx.set_var(var_name, &opt_char.to_string());
+if needs_arg {
+                    if optpos < opt_chars.len() {
+                        // Argument attached: -oarg
+                        let rest: String = opt_chars[optpos..].iter().collect();
+                        ctx.set_var("OPTARG", &rest);
+                    } else if optind <= loop_args.len() {
+                        // Next arg is the option argument
+                        let next_arg = &loop_args[optind - 1];
+                        ctx.set_var("OPTARG", next_arg);
+                        optind += 1;
+                    } else {
+                        if optstring.starts_with(':') {
+                            ctx.set_var(var_name, ":");
+                            ctx.set_var("OPTARG", &opt_char.to_string());
+                        } else {
+                            eprintln!("sh: getopts: option requires an argument -- {}", opt_char);
+                            ctx.set_var(var_name, "?");
+                        }
+                    }
+                } else {
+                    ctx.set_var("OPTARG", "");
+                }
+                ctx.set_var("OPTIND", &optind.to_string());
+                return Some(0);
+            }
+        }
         "alias" => {
             // Simple alias support
             for arg in args {
@@ -1378,7 +1540,7 @@ fn is_builtin(cmd: &str) -> bool {
     matches!(cmd, "cd" | "exit" | "export" | "echo" | "type" | "test" | "["
         | "eval" | "." | "source" | "read" | "exec" | "wait" | "shift"
         | "unset" | "set" | "return" | "break" | "continue" | "alias" | "unalias"
-        | ":" | "readonly" | "trap" | "command")
+        | ":" | "readonly" | "trap" | "command" | "umask" | "getopts")
 }
 
 #[cfg(unix)]
@@ -1505,7 +1667,7 @@ fn file_inode(path: &str) -> u64 {
 
 // ─── Parse redirects ─────────────────────────────────────────────────────────
 
-fn parse_redirects(tokens: &[String], _ctx: &mut ShellContext, mut line_idx: usize, input_lines: &[String]) -> (Vec<Redirect>, usize) {
+fn parse_redirects(tokens: &[String], ctx: &mut ShellContext, mut line_idx: usize, input_lines: &[String]) -> (Vec<Redirect>, usize) {
     let mut redirects = Vec::new();
     let mut i = 0;
 
@@ -1549,18 +1711,33 @@ fn parse_redirects(tokens: &[String], _ctx: &mut ShellContext, mut line_idx: usi
             "<<" => {
                 // Heredoc
                 if i + 1 < tokens.len() {
-                    let delim = tokens[i + 1].clone();
-                    let mut content = String::new();
-                    while line_idx < input_lines.len() {
-                        let l = input_lines[line_idx].trim_end().to_string();
-                        line_idx += 1;
-                        if l.trim() == delim { break; }
-                        content.push_str(&l);
-                        content.push('\n');
+                    let mut delim = tokens[i + 1].clone();
+                    let is_literal = delim.starts_with('\'') || delim.starts_with('"');
+                    if is_literal {
+                        delim = delim[1..delim.len()-1].to_string();
                     }
+                    // First check pending_heredocs (from collect_complete_lines)
+                    let content = if let Some((mut c, lit)) = ctx.pending_heredocs.remove(&delim) {
+                        if !lit {
+                            c = expand_vars(&c, ctx);
+                        }
+                        c
+                    } else {
+                        // Fallback: read from input_lines
+                        let mut c = String::new();
+                        while line_idx < input_lines.len() {
+                            let l = input_lines[line_idx].trim_end().to_string();
+                            line_idx += 1;
+                            if l.trim() == delim { break; }
+                            c.push_str(&l);
+                            c.push('\n');
+                        }
+                        c
+                    };
                     redirects.push(Redirect {
-                        fd: 0, op: "<<".to_string(), target: String::new(),
+                        fd: 0, op: "<<".to_string(), target: delim,
                         heredoc_content: Some(content),
+                        heredoc_literal: is_literal,
                     });
                 }
                 i += 2;
@@ -1573,6 +1750,7 @@ fn parse_redirects(tokens: &[String], _ctx: &mut ShellContext, mut line_idx: usi
                     redirects.push(Redirect {
                         fd: 0, op: "<<<".to_string(), target: String::new(),
                         heredoc_content: Some(val),
+                        heredoc_literal: false,
                     });
                 }
                 i += 2;
@@ -1585,6 +1763,7 @@ fn parse_redirects(tokens: &[String], _ctx: &mut ShellContext, mut line_idx: usi
             let target = tokens[i + 1].clone();
             redirects.push(Redirect {
                 fd, op: op.to_string(), target, heredoc_content: None,
+                heredoc_literal: false,
             });
         }
         i += 2;
@@ -1869,10 +2048,14 @@ enum Ast {
 
 // ─── Line continuation helper ────────────────────────────────────────────────
 
-fn collect_complete_lines(input: &str) -> Vec<String> {
+fn collect_complete_lines(input: &str, ctx: &mut ShellContext) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
+    let mut heredoc_body = String::new();
+    let mut heredoc_delim: Option<(String, bool)> = None;
+    let mut heredoc_just_closed = false;
     let mut brace_depth: i32 = 0;
+    let mut paren_depth: i32 = 0;
     let mut kw_depth: i32 = 0;
     let mut in_sq = false;
     let mut in_dq = false;
@@ -1880,24 +2063,41 @@ fn collect_complete_lines(input: &str) -> Vec<String> {
     for line in input.lines() {
         let trimmed = line.trim_end();
 
-        // Handle \ continuation
+        if let Some((ref delim, ref is_lit)) = heredoc_delim {
+            let trimmed_line = trimmed.trim().to_string();
+            if trimmed_line == *delim {
+                let d = delim.clone();
+                let body = heredoc_body.clone();
+                let lit = *is_lit;
+                heredoc_delim = None;
+                heredoc_just_closed = true;
+                ctx.pending_heredocs.insert(d, (body, lit));
+                continue;
+            }
+            if !heredoc_body.is_empty() {
+                heredoc_body.push('\n');
+            }
+            heredoc_body.push_str(trimmed);
+            continue;
+        }
+
         if trimmed.ends_with('\\') {
             current.push_str(&trimmed[..trimmed.len()-1]);
             current.push('\n');
             continue;
         }
 
-        // Track brace depth accounting for quotes
         for c in trimmed.chars() {
             if c == '\'' && !in_dq { in_sq = !in_sq; }
             else if c == '"' && !in_sq { in_dq = !in_dq; }
             else if !in_sq && !in_dq {
                 if c == '{' { brace_depth += 1; }
                 else if c == '}' { brace_depth -= 1; }
+                else if c == '(' { paren_depth += 1; }
+                else if c == ')' { paren_depth -= 1; }
             }
         }
 
-        // Track keyword depth via tokenization
         let tokens = tokenize(trimmed);
         for tok in &tokens {
             match tok.as_str() {
@@ -1907,15 +2107,44 @@ fn collect_complete_lines(input: &str) -> Vec<String> {
             }
         }
 
-        if !current.is_empty() {
+        if !current.is_empty() && !heredoc_just_closed {
             current.push_str("; ");
         }
         current.push_str(trimmed);
 
-        if brace_depth <= 0 && kw_depth <= 0 {
-            lines.push(current.clone());
-            current.clear();
+        if heredoc_just_closed && heredoc_delim.is_none() {
+            if brace_depth <= 0 && paren_depth <= 0 && kw_depth <= 0 {
+                lines.push(current.clone());
+                current.clear();
+                heredoc_just_closed = false;
+                if brace_depth < 0 { brace_depth = 0; }
+                if paren_depth < 0 { paren_depth = 0; }
+                if kw_depth < 0 { kw_depth = 0; }
+                continue;
+            }
+            heredoc_just_closed = false;
+        }
+
+        if brace_depth <= 0 && paren_depth <= 0 && kw_depth <= 0 {
+            let ctokens = tokenize(&current);
+            let mut has_heredoc = false;
+            for i in 0..ctokens.len() {
+                if ctokens[i] == "<<" && i + 1 < ctokens.len() {
+                    let raw_delim = &ctokens[i + 1];
+                    let lit = raw_delim.starts_with('\'') || raw_delim.starts_with('"');
+                    let delim = if lit { raw_delim[1..raw_delim.len()-1].to_string() } else { raw_delim.clone() };
+                    heredoc_delim = Some((delim, lit));
+                    heredoc_body.clear();
+                    has_heredoc = true;
+                    break;
+                }
+            }
+            if !has_heredoc {
+                lines.push(current.clone());
+                current.clear();
+            }
             if brace_depth < 0 { brace_depth = 0; }
+            if paren_depth < 0 { paren_depth = 0; }
             if kw_depth < 0 { kw_depth = 0; }
         }
     }
@@ -1961,6 +2190,7 @@ fn parse_command(tokens: &[String]) -> CmdNode {
                 op,
                 target,
                 heredoc_content: None,
+                heredoc_literal: false,
             });
             j += 2;
         } else if j + 1 < cmd_tokens.len() && is_redirect_op(&cmd_tokens[j+1]) {
@@ -2558,14 +2788,33 @@ fn execute_sequence(tokens: &[String], ctx: &mut ShellContext) -> i32 {
                     if op.contains('<') || op == "<<" || op == "<<<" { 0 } else { 1 }
                 )
             });
-            let target = if i + 1 < expanded.len() { expanded[i + 1].clone() } else { String::new() };
-            // If the target is also a redirect op, skip
+            let mut target = if i + 1 < expanded.len() { expanded[i + 1].clone() } else { String::new() };
             if is_redirect_op(&target) {
                 i += 1;
                 continue;
             }
+            let (heredoc_content, heredoc_literal) = match op.as_str() {
+                "<<" => {
+                    let clean = if target.starts_with('\'') || target.starts_with('"') {
+                        target[1..target.len()-1].to_string()
+                    } else {
+                        target.clone()
+                    };
+                    if let Some((mut content, lit)) = ctx.pending_heredocs.remove(&clean) {
+                        target = clean;
+                        if !lit {
+                            content = expand_vars(&content, ctx);
+                        }
+                        (Some(content), lit)
+                    } else {
+                        (None, false)
+                    }
+                }
+                _ => (None, false),
+            };
             redirects.push(Redirect {
-                fd, op, target, heredoc_content: None,
+                fd, op, target, heredoc_content,
+                heredoc_literal,
             });
             i += 2;
         } else if !token.is_empty() && token.chars().all(|c| c.is_ascii_digit())
@@ -2732,7 +2981,7 @@ fn main() {
     if args.len() > 1 {
         if args[1] == "-c" && args.len() > 2 {
             let cmd = &args[2];
-            let lines = collect_complete_lines(cmd);
+            let lines = collect_complete_lines(cmd, &mut ctx);
             for line in lines {
                 exec_line(&line, &mut ctx);
             }
@@ -2747,7 +2996,7 @@ fn main() {
         if args.len() > 2 {
             ctx.positional = args[2..].to_vec();
         }
-        let lines = collect_complete_lines(&content);
+        let lines = collect_complete_lines(&content, &mut ctx);
         for line in lines {
             let trimmed = line.trim().to_string();
             if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
@@ -2761,7 +3010,7 @@ fn main() {
     if !io::stdin().is_terminal() {
         let content: Vec<String> = io::stdin().lines().filter_map(|l| l.ok()).collect();
         let content = content.join("\n");
-        let lines = collect_complete_lines(&content);
+        let lines = collect_complete_lines(&content, &mut ctx);
         for line in lines {
             let trimmed = line.trim().to_string();
             if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
