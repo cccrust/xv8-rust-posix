@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::io::{self, BufRead, IsTerminal, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio, exit};
 #[cfg(unix)]
@@ -19,9 +19,17 @@ struct Redirect {
     heredoc_content: Option<String>,
 }
 
+#[derive(Clone, Debug)]
+enum ControlFlow {
+    Break(usize),
+    Continue(usize),
+    Return(i32),
+}
+
 struct ShellContext {
     vars: HashMap<String, String>,
     exported: Vec<String>,
+    readonly: Vec<String>,
     last_status: i32,
     last_bg_pid: Option<u32>,
     shell_pid: u32,
@@ -29,6 +37,10 @@ struct ShellContext {
     funcs: HashMap<String, Vec<Vec<String>>>,
     loop_level: usize,
     dot_file: Option<PathBuf>,
+    control_flow: Option<ControlFlow>,
+    traps: HashMap<String, String>,
+    func_depth: usize,
+    shell_options: HashMap<String, bool>,
 }
 
 impl ShellContext {
@@ -37,6 +49,7 @@ impl ShellContext {
         let mut ctx = Self {
             vars: HashMap::new(),
             exported: Vec::new(),
+            readonly: Vec::new(),
             last_status: 0,
             last_bg_pid: None,
             shell_pid: pid,
@@ -44,6 +57,10 @@ impl ShellContext {
             funcs: HashMap::new(),
             loop_level: 0,
             dot_file: None,
+            control_flow: None,
+            traps: HashMap::new(),
+            func_depth: 0,
+            shell_options: HashMap::new(),
         };
         ctx.vars.insert("$".to_string(), pid.to_string());
         ctx.vars.insert("?".to_string(), "0".to_string());
@@ -86,6 +103,10 @@ impl ShellContext {
     }
 
     fn set_var(&mut self, name: &str, value: &str) {
+        if self.readonly.contains(&name.to_string()) {
+            eprintln!("sh: {}: is read only", name);
+            return;
+        }
         self.vars.insert(name.to_string(), value.to_string());
     }
 
@@ -171,7 +192,19 @@ fn tokenize(input: &str) -> Vec<String> {
                     }
                     continue;
                 }
-                ';' => { flush(&mut current, &mut tokens); tokens.push(";".to_string()); i += 1; continue; }
+                ';' => {
+                    flush(&mut current, &mut tokens);
+                    if i + 1 < chars.len() && chars[i + 1] == ';' {
+                        if i + 2 < chars.len() && chars[i + 2] == '&' {
+                            tokens.push(";;&".to_string()); i += 3;
+                        } else {
+                            tokens.push(";;".to_string()); i += 2;
+                        }
+                    } else {
+                        tokens.push(";".to_string()); i += 1;
+                    }
+                    continue;
+                }
                 '&' => {
                     flush(&mut current, &mut tokens);
                     if i + 1 < chars.len() && chars[i + 1] == '&' {
@@ -894,6 +927,7 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
         }
         "exit" => {
             let code = args.first().and_then(|s| s.parse::<i32>().ok()).unwrap_or(ctx.last_status);
+            run_exit_traps(ctx);
             exit(code);
         }
         "export" => {
@@ -986,21 +1020,48 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
                 return Some(1);
             }
             let file = &args[0];
+            // Search PATH if filename has no slash
+            let resolved = if file.contains('/') {
+                file.clone()
+            } else {
+                let path = env::var("PATH").unwrap_or_default();
+                let mut found = String::new();
+                for dir in path.split(':') {
+                    let full = Path::new(dir).join(file);
+                    if full.is_file() {
+                        found = full.to_string_lossy().to_string();
+                        break;
+                    }
+                }
+                if found.is_empty() {
+                    eprintln!("sh: .: {}: file not found", file);
+                    return Some(1);
+                }
+                found
+            };
             let prev_positional = ctx.positional.clone();
             ctx.positional = args[1..].to_vec();
-            match fs::read_to_string(file) {
+            ctx.func_depth += 1;
+            match fs::read_to_string(&resolved) {
                 Ok(content) => {
+                    let mut last_status = 0;
                     for line in content.lines() {
                         let trimmed = line.trim().to_string();
                         if trimmed.is_empty() || trimmed.starts_with('#') {
                             continue;
                         }
-                        exec_line(&trimmed, ctx);
+                        last_status = exec_line(&trimmed, ctx);
+                        if let Some(ControlFlow::Return(status)) = ctx.control_flow.take() {
+                            last_status = status;
+                            break;
+                        }
                     }
+                    ctx.func_depth -= 1;
                     ctx.positional = prev_positional;
-                    Some(0)
+                    Some(last_status)
                 }
                 Err(e) => {
+                    ctx.func_depth -= 1;
                     eprintln!("sh: .: {}: {}", file, e);
                     ctx.positional = prev_positional;
                     Some(1)
@@ -1008,11 +1069,35 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
             }
         }
         "read" => {
-            let var = args.first().cloned().unwrap_or_else(|| "REPLY".to_string());
+            let mut i = 0;
+            let mut raw = false;
+            while i < args.len() && args[i].starts_with('-') {
+                for c in args[i][1..].chars() {
+                    match c { 'r' => raw = true, _ => {} }
+                }
+                i += 1;
+            }
+            let var = args.get(i).cloned().unwrap_or_else(|| "REPLY".to_string());
             let mut input = String::new();
             match io::stdin().read_line(&mut input) {
                 Ok(n) if n > 0 => {
-                    let trimmed = input.trim_end_matches('\n').trim_end_matches('\r').to_string();
+                    let trimmed = if raw {
+                        input.trim_end_matches('\n').trim_end_matches('\r').to_string()
+                    } else {
+                        // Handle backslash continuation
+                        let s = input.trim_end_matches('\n').trim_end_matches('\r').to_string();
+                        let mut result = String::new();
+                        let mut chars = s.chars().peekable();
+                        while let Some(c) = chars.next() {
+                            if c == '\\' && chars.peek().is_some() {
+                                // Skip backslash, next char is literal
+                                result.push(chars.next().unwrap());
+                            } else {
+                                result.push(c);
+                            }
+                        }
+                        result
+                    };
                     ctx.set_var(&var, &trimmed);
                     Some(0)
                 }
@@ -1045,23 +1130,129 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
             }
         }
         "wait" => {
-            if let Some(pid_str) = args.first() {
-                if let Ok(pid) = pid_str.parse::<u32>() {
-                    // Wait for specific PID
-                    let mut cmd = Command::new("kill");
-                    cmd.args(["-0", &pid.to_string()]);
-                    // This is a simplification — real wait is more complex
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                    Some(0)
+            #[cfg(unix)]
+            {
+                let ret = if let Some(pid_str) = args.first() {
+                    if let Ok(pid) = pid_str.parse::<i32>() {
+                        let mut status = 0;
+                        unsafe { libc::waitpid(pid, &mut status, 0); }
+                        if libc::WIFEXITED(status) {
+                            libc::WEXITSTATUS(status)
+                        } else {
+                            0
+                        }
+                    } else {
+                        eprintln!("sh: wait: {}: not a pid", pid_str);
+                        return Some(1);
+                    }
                 } else {
-                    eprintln!("sh: wait: {}: not a pid", pid_str);
-                    Some(1)
-                }
-            } else {
-                // Wait for all background jobs
+                    // Wait for any child
+                    let mut status = 0;
+                    unsafe { libc::waitpid(-1, &mut status, 0); }
+                    if libc::WIFEXITED(status) {
+                        libc::WEXITSTATUS(status)
+                    } else {
+                        0
+                    }
+                };
+                Some(ret)
+            }
+            #[cfg(not(unix))]
+            {
                 std::thread::sleep(std::time::Duration::from_millis(10));
                 Some(0)
             }
+        }
+        "readonly" => {
+            if args.is_empty() {
+                let mut keys: Vec<&String> = ctx.readonly.iter().collect();
+                keys.sort();
+                for k in keys {
+                    if let Some(val) = ctx.vars.get(k) {
+                        println!("readonly {}='{}'", k, val);
+                    }
+                }
+                return Some(0);
+            }
+            for arg in args {
+                if let Some(eq) = arg.find('=') {
+                    let name = &arg[..eq];
+                    let val = &arg[eq+1..];
+                    ctx.set_var(name, val);
+                    if !ctx.readonly.contains(&name.to_string()) {
+                        ctx.readonly.push(name.to_string());
+                    }
+                } else {
+                    if !ctx.readonly.contains(&arg.to_string()) {
+                        ctx.readonly.push(arg.to_string());
+                    }
+                }
+            }
+            Some(0)
+        }
+"trap" => {
+            if args.is_empty() {
+                // List traps
+                let mut sigs: Vec<String> = ctx.traps.keys().cloned().collect();
+                sigs.sort();
+                for sig in &sigs {
+                    if let Some(cmd) = ctx.traps.get(sig) {
+                        println!("trap -- '{}' {}", cmd, sig);
+                    }
+                }
+                return Some(0);
+            }
+            if args.len() == 1 && args[0] == "-l" {
+                // List signal names — simple implementation
+                println!(" 1) SIGHUP       2) SIGINT       3) SIGQUIT      4) SIGILL       5) SIGTRAP");
+                println!(" 6) SIGABRT      7) SIGEMT       8) SIGFPE       9) SIGKILL     10) SIGBUS");
+                println!("11) SIGSEGV     12) SIGSYS      13) SIGPIPE     14) SIGALRM    15) SIGTERM");
+                return Some(0);
+            }
+            let action = &args[0];
+            let signals = &args[1..];
+            if signals.is_empty() {
+                // Single arg that is a signal name/number — reset it
+                ctx.traps.remove(action);
+                return Some(0);
+            }
+            for sig in signals {
+                if action == "-" {
+                    ctx.traps.remove(sig);
+                } else {
+                    ctx.traps.insert(sig.clone(), action.clone());
+                }
+            }
+            Some(0)
+        }
+        "command" => {
+            if args.is_empty() {
+                eprintln!("sh: command: usage: command [-p] utility [argument ...]");
+                return Some(1);
+            }
+            let mut skip = 0;
+            if args[0] == "-p" { skip = 1; }
+            if skip >= args.len() {
+                return Some(0);
+            }
+            let cmd_name = &args[skip];
+            let cmd_args: Vec<String> = args[skip + 1..].to_vec();
+            // command: skip functions, only use builtins and external
+            if let Some(status) = exec_builtin(cmd_name, &cmd_args, &[], ctx) {
+                ctx.last_status = status;
+                return Some(status);
+            }
+            // External command
+            let mut cmd_obj = Command::new(cmd_name);
+            cmd_obj.args(&cmd_args);
+            ctx.push_vars_to_env();
+            let status = cmd_obj.status().unwrap_or_else(|_| {
+                eprintln!("sh: command: {}: not found", cmd_name);
+                std::process::exit(127);
+            });
+            let code = status.code().unwrap_or(0);
+            ctx.last_status = code;
+            Some(code)
         }
         "shift" => {
             let n = args.first().and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
@@ -1088,6 +1279,45 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
                     println!("{}='{}'", k, ctx.vars.get(k).unwrap());
                 }
                 Some(0)
+            } else if args[0].starts_with('-') || args[0].starts_with('+') {
+                // Handle options: set -e, set +e, set -o option, etc.
+                let mut status = 0;
+                let mut i = 0;
+                while i < args.len() && (args[i].starts_with('-') || args[i].starts_with('+')) {
+                    let enable = args[i].starts_with('-');
+                    let chars: Vec<char> = if args[i].len() > 1 { args[i][1..].chars().collect() } else { vec![] };
+                    if chars == ['o'] {
+                        // set -o option or set +o option
+                        i += 1;
+                        if i < args.len() {
+                            ctx.shell_options.insert(args[i].clone(), enable);
+                        }
+                    } else {
+                        for c in chars {
+                            match c {
+                                'e' => { ctx.shell_options.insert("errexit".to_string(), enable); }
+                                'u' => { ctx.shell_options.insert("nounset".to_string(), enable); }
+                                'x' => { ctx.shell_options.insert("xtrace".to_string(), enable); }
+                                'C' => { ctx.shell_options.insert("noclobber".to_string(), enable); }
+                                'v' => { ctx.shell_options.insert("verbose".to_string(), enable); }
+                                'n' => { ctx.shell_options.insert("noexec".to_string(), enable); }
+                                'f' => { ctx.shell_options.insert("noglob".to_string(), enable); }
+                                'm' => { ctx.shell_options.insert("monitor".to_string(), enable); }
+                                _ => { eprintln!("sh: set: unknown option: -{}", c); status = 1; }
+                            }
+                        }
+                    }
+                    i += 1;
+                }
+                // Remaining args after options become positional params
+                if i < args.len() {
+                    let mut pos: Vec<String> = args[i..].to_vec();
+                    if pos.first().map(|s| s.as_str()) == Some("--") {
+                        pos.remove(0);
+                    }
+                    ctx.positional = pos;
+                }
+                Some(status)
             } else {
                 // Set positional parameters
                 let mut pos = args.to_vec();
@@ -1100,12 +1330,27 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
         }
         "return" => {
             let code = args.first().and_then(|s| s.parse::<i32>().ok()).unwrap_or(ctx.last_status);
-            // Return from function — we handle by propagating status
-            Some(if code >= 0 { code } else { code })
+            if ctx.func_depth > 0 {
+                ctx.control_flow = Some(ControlFlow::Return(code));
+                Some(code)
+            } else {
+                eprintln!("sh: return: can only return from a function or sourced script");
+                Some(1)
+            }
         }
-        "break" | "continue" => {
-            // Handled during AST execution
-            None
+        "break" => {
+            let n = args.first().and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
+            ctx.control_flow = Some(ControlFlow::Break(n));
+            Some(0)
+        }
+        "continue" => {
+            let n = args.first().and_then(|s| s.parse::<usize>().ok()).unwrap_or(1);
+            ctx.control_flow = Some(ControlFlow::Continue(n));
+            Some(0)
+        }
+        ":" => {
+            // Null builtin — does nothing, returns 0
+            Some(0)
         }
         "alias" => {
             // Simple alias support
@@ -1132,7 +1377,8 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
 fn is_builtin(cmd: &str) -> bool {
     matches!(cmd, "cd" | "exit" | "export" | "echo" | "type" | "test" | "["
         | "eval" | "." | "source" | "read" | "exec" | "wait" | "shift"
-        | "unset" | "set" | "return" | "break" | "continue" | "alias" | "unalias")
+        | "unset" | "set" | "return" | "break" | "continue" | "alias" | "unalias"
+        | ":" | "readonly" | "trap" | "command")
 }
 
 #[cfg(unix)]
@@ -1627,6 +1873,7 @@ fn collect_complete_lines(input: &str) -> Vec<String> {
     let mut lines = Vec::new();
     let mut current = String::new();
     let mut brace_depth: i32 = 0;
+    let mut kw_depth: i32 = 0;
     let mut in_sq = false;
     let mut in_dq = false;
 
@@ -1650,15 +1897,26 @@ fn collect_complete_lines(input: &str) -> Vec<String> {
             }
         }
 
+        // Track keyword depth via tokenization
+        let tokens = tokenize(trimmed);
+        for tok in &tokens {
+            match tok.as_str() {
+                "if" | "for" | "while" | "until" | "case" => kw_depth += 1,
+                "fi" | "done" | "esac" => kw_depth -= 1,
+                _ => {}
+            }
+        }
+
         if !current.is_empty() {
             current.push_str("; ");
         }
         current.push_str(trimmed);
 
-        if brace_depth <= 0 {
+        if brace_depth <= 0 && kw_depth <= 0 {
             lines.push(current.clone());
             current.clear();
             if brace_depth < 0 { brace_depth = 0; }
+            if kw_depth < 0 { kw_depth = 0; }
         }
     }
     if !current.is_empty() {
@@ -1939,6 +2197,13 @@ fn parse_and_exec(tokens: &[String], ctx: &mut ShellContext) -> i32 {
             for word in &words {
                 ctx.set_var(&var, word);
                 last_status = exec_group_tokens(&body, ctx);
+                if let Some(sig) = ctx.control_flow.take() {
+                    match sig {
+                        ControlFlow::Break(_) => { break; }
+                        ControlFlow::Continue(_) => { continue; }
+                        ControlFlow::Return(_) => { ctx.control_flow = Some(sig); break; }
+                    }
+                }
             }
             last_status
         }
@@ -1952,6 +2217,13 @@ fn parse_and_exec(tokens: &[String], ctx: &mut ShellContext) -> i32 {
             while if until { cond_status != 0 } else { cond_status == 0 } {
                 ctx.loop_level += 1;
                 last_status = exec_group_tokens(&body, ctx);
+                if let Some(sig) = ctx.control_flow.take() {
+                    match sig {
+                        ControlFlow::Break(_) => { ctx.loop_level -= 1; break; }
+                        ControlFlow::Continue(_) => { ctx.loop_level -= 1; cond_status = exec_group_tokens(&cond_tokens, ctx); continue; }
+                        ControlFlow::Return(_) => { ctx.control_flow = Some(sig); ctx.loop_level -= 1; break; }
+                    }
+                }
                 ctx.loop_level -= 1;
                 cond_status = exec_group_tokens(&cond_tokens, ctx);
             }
@@ -1967,19 +2239,41 @@ fn parse_and_exec(tokens: &[String], ctx: &mut ShellContext) -> i32 {
             let body_tokens: Vec<String> = tokens[in_pos + 1..].to_vec();
             // Find matching pattern
             let mut i = 0;
+            // Skip leading ; from line joining
+            while i < body_tokens.len() && body_tokens[i] == ";" { i += 1; }
             let mut result = 0;
             let mut matched = false;
             while i < body_tokens.len() {
+                // Skip ; from line joining
+                while i < body_tokens.len() && body_tokens[i] == ";" { i += 1; }
+                if i >= body_tokens.len() { break; }
                 if body_tokens[i] == "esac" { break; }
                 if body_tokens[i] == ";;" || body_tokens[i] == ";;&" {
                     if matched { break; }
                     i += 1;
                     continue;
                 }
-                // Parse pattern: pattern ) commands ;;
+                // Parse pattern: pattern[|pattern...] ) commands ;;
                 let close_paren = body_tokens[i..].iter().position(|t| t == ")");
                 if let Some(cp) = close_paren {
-                    let patterns: Vec<String> = body_tokens[i..i+cp].iter().cloned().collect();
+                    let pattern_tokens: Vec<String> = body_tokens[i..i+cp].iter().cloned().collect();
+                    // Split on | to get individual patterns
+                    let mut patterns: Vec<String> = Vec::new();
+                    let mut cur_pat = String::new();
+                    for pt in &pattern_tokens {
+                        if pt == "|" {
+                            if !cur_pat.is_empty() {
+                                patterns.push(cur_pat);
+                                cur_pat = String::new();
+                            }
+                        } else {
+                            if !cur_pat.is_empty() { cur_pat.push(' '); }
+                            cur_pat.push_str(pt);
+                        }
+                    }
+                    if !cur_pat.is_empty() {
+                        patterns.push(cur_pat);
+                    }
                     let cmd_start = i + cp + 1;
                     let double_semi = body_tokens[cmd_start..].iter().position(|t| t == ";;" || t == "esac");
                     if let Some(ds) = double_semi {
@@ -2099,19 +2393,9 @@ fn exec_group_tokens(tokens: &[String], ctx: &mut ShellContext) -> i32 {
         return 0;
     }
 
-    // Check top-level keywords
-    if !tokens.is_empty() {
-        let first = tokens[0].as_str();
-        if matches!(first, "if" | "for" | "while" | "until" | "case" | "{" | "(" | "function" | "fn") {
-            return parse_and_exec(tokens, ctx);
-        }
-        // Check for function definition: name() { body }
-        if tokens.len() >= 4 && tokens[1] == "(" && tokens[2] == ")" && tokens[3] == "{" {
-            return parse_and_exec(tokens, ctx);
-        }
-    }
-
     // Split by &&, ||, ;, accounting for brace and keyword depth
+    // (No top-level keyword check — let splitting happen first, then each
+    //  group is routed to parse_and_exec by execute_sequence if needed)
     let mut groups: Vec<(Vec<String>, &str)> = Vec::new();
     let mut cur: Vec<String> = Vec::new();
     let mut op = "";
@@ -2162,6 +2446,9 @@ fn exec_group_tokens(tokens: &[String], ctx: &mut ShellContext) -> i32 {
     ctx.last_status = first_status;
 
     for i in 1..groups.len() {
+        if ctx.control_flow.is_some() {
+            break;
+        }
         let (ref gtokens, gop) = groups[i];
         let should_run = match gop {
             "&&" => ctx.last_status == 0,
@@ -2181,22 +2468,39 @@ fn execute_sequence(tokens: &[String], ctx: &mut ShellContext) -> i32 {
         return 0;
     }
 
-    // Check for function definition: name() { body }
+    // Check for control flow signals
+    if ctx.control_flow.is_some() {
+        return ctx.last_status;
+    }
+
+// Check for function definitions: name() { body }
     if tokens.len() >= 4 && tokens[1] == "(" && tokens[2] == ")" && tokens[3] == "{" {
         let close = tokens.iter().rposition(|t| t == "}");
         if let Some(cp) = close {
             let name = tokens[0].clone();
             let body_tokens = &tokens[4..cp];
             ctx.funcs.insert(name, vec![body_tokens.to_vec()]);
+            // Process tokens after the closing brace
+            if cp + 1 < tokens.len() {
+                return exec_group_tokens(&tokens[cp + 1..], ctx);
+            }
             return 0;
         }
         eprintln!("sh: syntax error: unclosed function body");
         return 1;
     }
+    // Check for function/fn keyword definitions: [function|fn] name { body }
+    if tokens.len() >= 4 && (tokens[0] == "function" || tokens[0] == "fn") && tokens[2] == "{" {
+        return parse_and_exec(tokens, ctx);
+    }
 
-    // Check for control flow keywords
+    // Check for control flow keywords (only keywords, not function names)
     let first = tokens[0].as_str();
-    if matches!(first, "if" | "for" | "while" | "until" | "case" | "{" | "(" | "function" | "fn") {
+    if matches!(first, "if" | "for" | "while" | "until" | "case" | "{" | "(") {
+        return parse_and_exec(tokens, ctx);
+    }
+    // Check for function definition: name() { body }
+    if tokens.len() >= 4 && tokens[1] == "(" && tokens[2] == ")" && tokens[3] == "{" {
         return parse_and_exec(tokens, ctx);
     }
 
@@ -2319,10 +2623,16 @@ fn execute_sequence(tokens: &[String], ctx: &mut ShellContext) -> i32 {
         let body = ctx.funcs.get(cmd).unwrap().clone();
         let prev_positional = ctx.positional.clone();
         ctx.positional = cmd_args;
+        ctx.func_depth += 1;
         let mut last_status = 0;
         for tokens in &body {
             last_status = exec_group_tokens(tokens, ctx);
+            if let Some(ControlFlow::Return(status)) = ctx.control_flow.take() {
+                last_status = status;
+                break;
+            }
         }
+        ctx.func_depth -= 1;
         ctx.positional = prev_positional;
         ctx.last_status = last_status;
         #[cfg(unix)]
@@ -2377,6 +2687,7 @@ fn repl(ctx: &mut ShellContext) {
         input.clear();
         if io::stdin().read_line(&mut input).ok().is_none_or(|n| n == 0) {
             println!();
+            run_exit_traps(ctx);
             break;
         }
         let line = input.trim().to_string();
@@ -2405,6 +2716,13 @@ fn repl(ctx: &mut ShellContext) {
     }
 }
 
+fn run_exit_traps(ctx: &mut ShellContext) {
+    if let Some(cmd) = ctx.traps.get("EXIT").cloned() {
+        ctx.traps.remove("EXIT");
+        exec_line(&cmd, ctx);
+    }
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 fn main() {
@@ -2418,6 +2736,7 @@ fn main() {
             for line in lines {
                 exec_line(&line, &mut ctx);
             }
+            run_exit_traps(&mut ctx);
             exit(ctx.last_status);
         }
         // Script file
@@ -2434,6 +2753,7 @@ fn main() {
             if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
             exec_line(&trimmed, &mut ctx);
         }
+        run_exit_traps(&mut ctx);
         exit(ctx.last_status);
     }
 
@@ -2447,6 +2767,7 @@ fn main() {
             if trimmed.is_empty() || trimmed.starts_with('#') { continue; }
             exec_line(&trimmed, &mut ctx);
         }
+        run_exit_traps(&mut ctx);
         exit(ctx.last_status);
     }
 

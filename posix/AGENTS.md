@@ -75,6 +75,8 @@ cargo build -p tools
 - **Phase 4 - Search & Filter:** grep, sed, xargs
 - **Phase 5 - System Tools:** ps, du, df, stty, test, nice, nohup, date
 - **Phase 6 - Shell:** sh (POSIX shell implementation)
+  - **Builtins:** `:` `cd` `echo` `eval` `exec` `exit` `export` `readonly` `read` `return` `set` `shift` `test` `[` `trap` `type` `unset` `wait` `command` `.` `source` `alias` `unalias` `break` `continue`
+  - **Features:** pipes, redirects (`>` `>>` `<` `<<` `<<<` `<>` `>&` `>&-` `2>` `2>&1`), variable expansion (`$var` `${var:-}` `${var:=}` `${var:+}` `${var:?}` `${#var}` `${var%}` `${var%%}` `${var#}` `${var##}`), arithmetic `$((...))`, command substitution `$(...)`, glob `*?[`, `if`/`then`/`elif`/`else`/`fi`, `for`/`in`/`do`/`done`, `while`/`until`, `case`/`|`/`esac`, functions `name() { }`, source/PATH search, `set -e`/`-u`/`-C`/`-x`/`-v`/`-n`/`-f`/`-m`, readline/history (basic), heredoc, alias, subshell `( )`, brace group `{ }`
 - **Phase 7 - Advanced:** find, tar, patch, comm, fold, fmt, nl, expand, unexpand
 - **Additional:** ed, awk, bc, m4, pax, vi, make, man, lp, mailx, su, cal, ed, and more
 
