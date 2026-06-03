@@ -340,6 +340,7 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
     let has_ack = flags & TCP_ACK != 0;
     let has_fin = flags & TCP_FIN != 0;
     let has_rst = flags & TCP_RST != 0;
+    let has_psh = flags & TCP_PSH != 0;
 
     // SYN (no ACK) → passive open, find listener
     if has_syn && !has_ack {
@@ -369,7 +370,11 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
                     c.state = TcpState::Established;
                     c.send_seq = ack;
                     c.recv_seq = seq.wrapping_add(1);
+                    let (lport, rip, rport, sseq, rseq) = (c.local_port, c.remote_ip, c.remote_port, c.send_seq, c.recv_seq);
                     proc::wakeup(Channel::Buffer(c as *const _ as usize));
+                    drop(table);
+                    // Send ACK to complete server-side handshake (SynReceived -> Established)
+                    let _ = transmit_tcp(rip, rport, lport, sseq, rseq, TCP_ACK, &[]);
                     return Ok(());
                 }
             }
@@ -378,26 +383,28 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
     }
 
     // ACK of SYN-ACK → server side handshake completion
+    // Also matches data-bearing PSH+ACK for SynReceived state (e.g., first data packet)
     if has_ack && !has_syn && !has_fin {
         let mut table = TCP_TABLE.lock();
         for child_id in 0..NTCP {
-            let local_port = table.entries[child_id].as_ref()
-                .filter(|c| matches!(c.state, TcpState::SynReceived) && c.remote_ip == src_ip && c.remote_port == src_port)
-                .map(|c| c.local_port);
-            if let Some(lport) = local_port {
-                if let Some(c) = table.entries[child_id].as_mut() {
-                    c.state = TcpState::Established;
+            let (state, local_port) = match &table.entries[child_id] {
+                Some(c) if c.remote_ip == src_ip && c.remote_port == src_port => (c.state, c.local_port),
+                _ => continue,
+            };
+            if !matches!(state, TcpState::SynReceived) { continue; }
+            if let Some(c) = table.entries[child_id].as_mut() {
+                c.state = TcpState::Established;
+            }
+            if let Some(listener) = table.find_listener(local_port) {
+                if let Some(p) = table.entries[listener].as_mut() {
+                    p.backlog.push(child_id);
+                    proc::wakeup(Channel::Buffer(p as *const _ as usize));
                 }
-                if let Some(listener) = table.find_listener(lport) {
-                    if let Some(p) = table.entries[listener].as_mut() {
-                        p.backlog.push(child_id);
-                        proc::wakeup(Channel::Buffer(p as *const _ as usize));
-                    }
-                }
-                break;
             }
         }
-        return Ok(());
+        // Do NOT return yet — data in a PSH+ACK for SynReceived should fall through to handler #6
+        // Re-check: if a SynReceived entry was transitioned, the packet may carry data.
+        // We'll fall through below for data processing on the now-Established connection.
     }
 
     // Data delivery / FIN / RST to established connections

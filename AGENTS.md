@@ -64,7 +64,7 @@ cd posix && cargo build --release && PATH="target/release:$PATH" sh tools/tests/
 
 ## net/ Cross-Platform Design
 
-`net/libnet/` uses `std::net` on host (linux/mac). For xv8 target, the kernel provides its own net stack (Ethernet, ARP, IPv4, UDP, ICMP, DHCP) with syscall wrappers. `xv8_std/xv8-libc-compat` bridges the gap. TCP in kernel is partially implemented (borrow checker issues).
+`net/libnet/` uses `std::net` on host (linux/mac). For xv8 target, the kernel provides its own net stack (Ethernet, ARP, IPv4, UDP, ICMP, DHCP, TCP) with syscall wrappers. `xv8_std/xv8-libc-compat` bridges the gap. TCP is fully functional on loopback (v2.1, 11/11 QEMU tests pass).
 
 ## Planning & Docs
 

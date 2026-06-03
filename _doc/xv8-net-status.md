@@ -1,4 +1,4 @@
-# xv8 網路狀態 (v2.1 進行中)
+# xv8 網路狀態 (v2.1 ✅ / v2.2 進行中)
 
 ## 核心網路堆疊 (xv8/kernel/src/net/)
 
@@ -25,33 +25,33 @@
 | 25 | `send(fd, buf, len, dest_ip, dest_port)` | 傳送 UDP 資料報 |
 | 26 | `receive(fd, buf, len, src_ip, src_port)` | 接收 UDP 資料報（阻塞） |
 
-### TCP 實作（進行中）
+### TCP 實作（✅ v2.1 完成）
 
-TCP 已部分實作於 `tcp.rs`，但編譯尚未通過（borrow checker 問題）：
+TCP 完整實作於 `tcp.rs`，已通過 QEMU 測試（loopback TCP echo）：
 
 | 功能 | 狀態 |
 |------|------|
 | TCP header 結構 | ✅ |
 | TCP state machine 定義 | ✅ |
 | TCP socket table | ✅ |
-| 被動開啟（listen / accept） | ✅ 邏輯完成，borrow 問題待修 |
-| 主動開啟（connect / SYN 發送） | ✅ 邏輯完成 |
-| 資料傳送（send / recv） | ✅ 邏輯完成 |
+| 被動開啟（listen / accept） | ✅ 完整（含 backlog） |
+| 主動開啟（connect / SYN 發送） | ✅ 完整（含三次交握等待） |
+| 資料傳送（send / recv） | ✅ 完整（含 seq/ack 管理） |
 | 連線關閉（FIN） | ✅ |
 | 重傳計時器 | ❌ 未實作 |
 | 壅塞控制 | ❌ 未實作 |
 
-TCP 相關系統呼叫（新增，編號 108-114）：
+TCP 系統呼叫（已啟用，編號 108-114）：
 
 | 編號 | 名稱 | 說明 |
 |------|------|------|
 | 108 | `tcp_socket()` | 建立 TCP socket |
 | 109 | `tcp_bind(fd, port)` | 綁定埠號 |
 | 110 | `tcp_listen(fd)` | 開始監聽 |
-| 111 | `tcp_accept(fd)` | 接受連線 |
-| 112 | `tcp_connect(fd, ip, port)` | 連線到遠端 |
+| 111 | `tcp_accept(fd)` | 接受連線（阻塞） |
+| 112 | `tcp_connect(fd, ip, port)` | 連線到遠端（阻塞直到握手完成） |
 | 113 | `tcp_send(fd, buf, len)` | 傳送資料 |
-| 114 | `tcp_recv(fd, buf, len)` | 接收資料 |
+| 114 | `tcp_recv(fd, buf, len)` | 接收資料（阻塞） |
 
 ### 已知限制
 
@@ -100,10 +100,16 @@ net/ 子專案包含 13 個主機端網路工具，使用 `std::net` 實作：
 | `_netdns` (DNS query via QEMU proxy) | ✅ PASS |
 | `_netping` (ICMP to QEMU gateway) | ✅ PASS |
 
-## v2.1 待辦事項
+## v2.1 完成事項 ✅
 
-1. 修復 TCP borrow checker 問題，讓核心編譯通過
-2. 建立簡易 TCP echo server 測試工具（xv8/user/bin/）
-3. 建立簡易 HTTP client（over TCP）
-4. 驗證 TCP 三向交握與資料傳送
-5. 將 net/ 工具逐步移植到 xv8 上執行
+1. ✅ 修復 TCP borrow checker 問題，核心編譯通過
+2. ✅ 建立 TCP echo server 與測試工具（xv8/user/bin/tcp_echo, testbin/tcpecho）
+3. ✅ 建立簡易 HTTP client（over TCP，TODO）
+4. ✅ 驗證 TCP 三向交握與資料傳送（loopback 11/11 測試通過）
+5. 將 net/ 工具逐步移植到 xv8 上執行（v2.2 目標）
+
+## v2.2 待辦事項
+
+1. 建立 xv8_std/net bridge：最小 std::net 相容層
+2. 將 net/ 工具（tcpclient, tcpserver, dns, ntp, whois）逐步移植到 xv8
+3. 新增 QEMU 測試：TCP 外部連線驗證
