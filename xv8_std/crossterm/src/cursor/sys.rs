@@ -1,11 +1,12 @@
-//! This module provides platform related functions.
-
 #[cfg(unix)]
 #[cfg(feature = "events")]
 pub use self::unix::position;
 #[cfg(windows)]
 #[cfg(feature = "events")]
 pub use self::windows::position;
+#[cfg(target_arch = "riscv64")]
+#[cfg(feature = "events")]
+pub use self::riscv64::position;
 #[cfg(windows)]
 pub(crate) use self::windows::{
     move_down, move_left, move_right, move_to, move_to_column, move_to_next_line,
@@ -18,3 +19,7 @@ pub(crate) mod windows;
 #[cfg(unix)]
 #[cfg(feature = "events")]
 pub(crate) mod unix;
+
+#[cfg(target_arch = "riscv64")]
+#[cfg(feature = "events")]
+pub(crate) mod riscv64;

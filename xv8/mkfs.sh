@@ -2,7 +2,7 @@
 set -e
 
 cargo build --release --package user
-cargo build --release --manifest-path ../posix/Cargo.toml --package tools
+cargo build --release --manifest-path ../posix/Cargo.toml --package tools --no-default-features
 rm -f target/fs.img
 
 # shellcheck disable=SC2046

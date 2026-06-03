@@ -593,5 +593,13 @@ path = "src/bin/mailx.rs"
 name = "su"
 path = "src/bin/su.rs"
 [[bin]]
+name = "ex"
+path = "src/bin/ex.rs"
+
+[[bin]]
+name = "fc"
+path = "src/bin/fc.rs"
+
+[[bin]]
 name = "test_dir"
 path = "src/bin/test_dir.rs"

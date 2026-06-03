@@ -1,6 +1,7 @@
+#[cfg(not(target_arch = "riscv64"))]
+use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
-    event::{read, Event, KeyCode, KeyEvent, KeyModifiers},
     execute, queue,
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
     terminal::{
@@ -10,7 +11,7 @@ use crossterm::{
 };
 use std::env;
 use std::fs;
-use std::io::{stdout, BufRead, BufReader, Result, Write};
+use std::io::{stdin, stdout, BufRead, BufReader, Result, Write};
 
 /// 編輯器的三種基本模式
 #[derive(PartialEq)]
@@ -18,6 +19,19 @@ enum Mode {
     Normal,
     Insert,
     Command,
+}
+
+#[cfg(target_arch = "riscv64")]
+#[derive(Clone, Copy)]
+enum RiscvKey {
+    Char(char),
+    Enter,
+    Backspace,
+    Left,
+    Right,
+    Up,
+    Down,
+    Esc,
 }
 
 struct Editor {
@@ -113,6 +127,7 @@ impl Editor {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "riscv64"))]
     fn process_keypress(&mut self) -> Result<()> {
         if let Event::Key(KeyEvent { code, modifiers, .. }) = read()? {
             if modifiers.contains(KeyModifiers::CONTROL) && code == KeyCode::Char('c') {
@@ -129,6 +144,43 @@ impl Editor {
         Ok(())
     }
 
+    #[cfg(target_arch = "riscv64")]
+    fn process_keypress(&mut self) -> Result<()> {
+        use std::io::Read;
+        let mut buf = [0u8; 4];
+        let n = stdin().read(&mut buf)?;
+        if n == 0 {
+            return Ok(());
+        }
+        // ^C
+        if buf[0] == 3 {
+            self.should_quit = true;
+            return Ok(());
+        }
+        // Esc
+        if buf[0] == 0x1b {
+            match self.mode {
+                Mode::Insert => self.mode = Mode::Normal,
+                Mode::Command => self.mode = Mode::Normal,
+                _ => {}
+            }
+            self.fix_cursor();
+            return Ok(());
+        }
+        let code = match buf[0] {
+            b'\n' | b'\r' => RiscvKey::Enter,
+            0x7f => RiscvKey::Backspace,
+            c => RiscvKey::Char(c as char),
+        };
+        match self.mode {
+            Mode::Normal => self.process_normal(code),
+            Mode::Insert => self.process_insert(code),
+            Mode::Command => self.process_command(code),
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_arch = "riscv64"))]
     fn process_normal(&mut self, code: KeyCode) {
         match code {
             KeyCode::Char('h') | KeyCode::Left => self.cx = self.cx.saturating_sub(1),
@@ -150,6 +202,29 @@ impl Editor {
         self.fix_cursor();
     }
 
+    #[cfg(target_arch = "riscv64")]
+    fn process_normal(&mut self, code: RiscvKey) {
+        match code {
+            RiscvKey::Char('h') | RiscvKey::Left => self.cx = self.cx.saturating_sub(1),
+            RiscvKey::Char('j') | RiscvKey::Down => {
+                if self.cy < self.lines.len() - 1 {
+                    self.cy += 1;
+                }
+            }
+            RiscvKey::Char('k') | RiscvKey::Up => self.cy = self.cy.saturating_sub(1),
+            RiscvKey::Char('l') | RiscvKey::Right => self.cx += 1,
+            
+            RiscvKey::Char('i') => self.mode = Mode::Insert,
+            RiscvKey::Char(':') => {
+                self.mode = Mode::Command;
+                self.command_buffer.clear();
+            }
+            _ => {}
+        }
+        self.fix_cursor();
+    }
+
+    #[cfg(not(target_arch = "riscv64"))]
     fn process_insert(&mut self, code: KeyCode) {
         match code {
             KeyCode::Esc => {
@@ -193,6 +268,50 @@ impl Editor {
         self.fix_cursor();
     }
 
+    #[cfg(target_arch = "riscv64")]
+    fn process_insert(&mut self, code: RiscvKey) {
+        match code {
+            RiscvKey::Esc => {
+                self.mode = Mode::Normal;
+                self.cx = self.cx.saturating_sub(1);
+            }
+            RiscvKey::Left => self.cx = self.cx.saturating_sub(1),
+            RiscvKey::Right => self.cx += 1,
+            RiscvKey::Up => self.cy = self.cy.saturating_sub(1),
+            RiscvKey::Down => {
+                if self.cy < self.lines.len() - 1 {
+                    self.cy += 1;
+                }
+            }
+            RiscvKey::Char(c) => {
+                self.lines[self.cy].insert(self.cx, c);
+                self.cx += 1;
+                self.modified = true;
+            }
+            RiscvKey::Enter => {
+                let rest: Vec<char> = self.lines[self.cy].drain(self.cx..).collect();
+                self.lines.insert(self.cy + 1, rest);
+                self.cy += 1;
+                self.cx = 0;
+                self.modified = true;
+            }
+            RiscvKey::Backspace => {
+                if self.cx > 0 {
+                    self.cx -= 1;
+                    self.lines[self.cy].remove(self.cx);
+                } else if self.cy > 0 {
+                    let current_line = self.lines.remove(self.cy);
+                    self.cy -= 1;
+                    self.cx = self.lines[self.cy].len();
+                    self.lines[self.cy].extend(current_line);
+                }
+                self.modified = true;
+            }
+            _ => {}
+        }
+        self.fix_cursor();
+    }
+
     fn save(&mut self) {
         let fname = match self.filename.clone() {
             Some(n) => n,
@@ -203,6 +322,7 @@ impl Editor {
         self.modified = false;
     }
 
+    #[cfg(not(target_arch = "riscv64"))]
     fn process_command(&mut self, code: KeyCode) {
         match code {
             KeyCode::Esc => self.mode = Mode::Normal,
@@ -220,6 +340,30 @@ impl Editor {
             }
             KeyCode::Char(c) => self.command_buffer.push(c),
             KeyCode::Backspace => {
+                self.command_buffer.pop();
+            }
+            _ => {}
+        }
+    }
+
+    #[cfg(target_arch = "riscv64")]
+    fn process_command(&mut self, code: RiscvKey) {
+        match code {
+            RiscvKey::Esc => self.mode = Mode::Normal,
+            RiscvKey::Enter => {
+                let cmd = self.command_buffer.trim().to_string();
+                if cmd == "q" || cmd == "q!" {
+                    self.should_quit = true;
+                } else if cmd == "w" {
+                    self.save();
+                } else if cmd == "wq" || cmd == "x" {
+                    self.save();
+                    self.should_quit = true;
+                }
+                self.mode = Mode::Normal;
+            }
+            RiscvKey::Char(c) => self.command_buffer.push(c),
+            RiscvKey::Backspace => {
                 self.command_buffer.pop();
             }
             _ => {}

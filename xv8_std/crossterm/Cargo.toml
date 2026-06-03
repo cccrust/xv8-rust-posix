@@ -23,6 +23,7 @@ parking_lot = "0.12"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 xv8-libc = { path = "../xv8-libc" }
+std = { package = "xv8-user-std", path = "../xv8-user-std" }
 
 [target.'cfg(unix)'.dependencies]
 libc = { version = "0.2", default-features = false, optional = true }

@@ -32,6 +32,7 @@ dependencies = [
  "signal-hook-mio",
  "spin",
  "xv8-libc",
+ "xv8-user-std",
 ]
 
 [[package]]

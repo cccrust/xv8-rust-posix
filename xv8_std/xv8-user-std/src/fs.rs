@@ -39,10 +39,18 @@ impl Metadata {
     pub fn created(&self) -> super::io::Result<super::time::SystemTime> { Ok(super::time::UNIX_EPOCH) }
     pub fn uid(&self) -> u32 { self.uid }
     pub fn gid(&self) -> u32 { self.gid }
+    pub fn is_symlink(&self) -> bool { (self.mode & 0o170000) == 0o120000 }
     pub fn file_type(&self) -> FileType {
-        if self.is_dir() { FileType::Directory }
-        else if self.is_file() { FileType::RegularFile }
-        else { FileType::Other }
+        match self.mode & 0o170000 {
+            0o100000 => FileType::RegularFile,
+            0o040000 => FileType::Directory,
+            0o020000 => FileType::CharDevice,
+            0o060000 => FileType::BlockDevice,
+            0o010000 => FileType::Fifo,
+            0o140000 => FileType::Socket,
+            0o120000 => FileType::Symlink,
+            _ => FileType::Other,
+        }
     }
 }
 
@@ -52,6 +60,7 @@ impl Permissions {
     pub fn mode(&self) -> u32 { self.mode }
     pub fn set_mode(&mut self, mode: u32) { self.mode = mode; }
     pub fn from_mode(mode: u32) -> Self { Permissions { mode } }
+    pub fn readonly(&self) -> bool { self.mode & 0o222 == 0 }
 }
 
 pub struct File { fd: usize }
@@ -280,6 +289,10 @@ pub enum FileType {
     RegularFile,
     Directory,
     Symlink,
+    BlockDevice,
+    CharDevice,
+    Fifo,
+    Socket,
     Other,
 }
 
@@ -287,6 +300,10 @@ impl FileType {
     pub fn is_dir(&self) -> bool { matches!(self, FileType::Directory) }
     pub fn is_file(&self) -> bool { matches!(self, FileType::RegularFile) }
     pub fn is_symlink(&self) -> bool { matches!(self, FileType::Symlink) }
+    pub fn is_block_device(&self) -> bool { matches!(self, FileType::BlockDevice) }
+    pub fn is_char_device(&self) -> bool { matches!(self, FileType::CharDevice) }
+    pub fn is_fifo(&self) -> bool { matches!(self, FileType::Fifo) }
+    pub fn is_socket(&self) -> bool { matches!(self, FileType::Socket) }
 }
 
 pub struct ReadDir { file: File, _path: String, _offset: usize }

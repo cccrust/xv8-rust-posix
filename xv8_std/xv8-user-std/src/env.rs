@@ -39,6 +39,10 @@ impl Iterator for EmptyEnvVars {
 
 pub fn vars() -> EmptyEnvVars { EmptyEnvVars }
 
+pub fn current_exe() -> super::io::Result<super::path::PathBuf> {
+    Ok(super::path::PathBuf::from(b"/bin/sh"))
+}
+
 pub fn current_dir() -> super::io::Result<super::path::PathBuf> {
     match var("PWD") {
         Ok(path) if !path.is_empty() => Ok(super::path::PathBuf::from(path.as_bytes())),

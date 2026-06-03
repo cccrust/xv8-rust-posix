@@ -44,6 +44,10 @@ mod runtime;
 
 pub mod io;
 pub mod fmt {
+pub use core::fmt::{
+    self, Arguments, Debug, Display, Formatter, Result, Write,
+    Error,
+};
     pub fn format(args: core::fmt::Arguments<'_>) -> alloc::string::String {
         alloc::fmt::format(args)
     }
@@ -58,6 +62,9 @@ macro_rules! format {
 
 pub use alloc::boxed::Box;
 pub mod path;
+pub mod result {
+    pub use core::result::*;
+}
 pub mod env;
 pub mod fs;
 pub mod process;
@@ -117,6 +124,27 @@ pub mod str {
     pub use core::str::*;
 }
 
+pub mod ops {
+    pub use core::ops::*;
+}
+
+pub mod hash {
+    pub use core::hash::*;
+}
+
+pub mod any {
+    pub use core::any::*;
+}
+
+pub mod convert {
+    pub use core::convert::*;
+}
+
+pub mod sync {
+    pub use core::sync::*;
+    pub use alloc::sync::Arc;
+}
+
 pub mod prelude {
     pub mod rust_2021 {
         pub use core::prelude::rust_2021::*;
@@ -148,5 +176,6 @@ pub mod collections {
 pub mod os {
     pub mod unix {
         pub mod fs;
+        pub mod io;
     }
 }

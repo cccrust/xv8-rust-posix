@@ -32,7 +32,7 @@ struct ShellContext {
     exported: Vec<String>,
     readonly: Vec<String>,
     last_status: i32,
-    last_bg_pid: Option<u32>,
+    last_bg_pid: Option<usize>,
     shell_pid: u32,
     positional: Vec<String>,
     funcs: HashMap<String, Vec<Vec<String>>>,
@@ -67,7 +67,9 @@ impl ShellContext {
         };
         ctx.vars.insert("$".to_string(), pid.to_string());
         ctx.vars.insert("?".to_string(), "0".to_string());
-        ctx.vars.insert("$".to_string(), pid.to_string());
+        for (key, value) in std::env::vars() {
+            ctx.vars.insert(key, value);
+        }
         ctx
     }
 
@@ -770,7 +772,7 @@ fn exec_cmd_subst(cmd: &str, ctx: &ShellContext) -> String {
     // Spawn our own shell to handle command substitution
     // This ensures builtins (echo, test, etc.) work correctly
     let exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("sh"));
-    let mut child = Command::new(&exe);
+    let mut child = Command::new(exe.to_str().unwrap_or("sh"));
     child.arg("-c").arg(cmd);
     // Export shell variables as environment variables for the subshell
     for (k, v) in &ctx.vars {
@@ -905,7 +907,7 @@ fn execute_cmd(argv: &[String], redirects: &[Redirect], background: bool, ctx: &
             Ok(c) => {
                 let pid = c.id();
                 println!("[1] {}", pid);
-                ctx.last_bg_pid = Some(pid);
+                ctx.last_bg_pid = Some(pid as usize);
                 0
             }
             Err(e) => {
@@ -1004,7 +1006,7 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
             }
             #[cfg(not(unix))]
             {
-                if newline { println!("{}", out); } else { print!("{}", out); io::stdout().flush().ok(); }
+                if newline { println!("{}", s); } else { print!("{}", s); io::stdout().flush().ok(); }
             }
             Some(0)
         }
@@ -1543,7 +1545,6 @@ fn is_builtin(cmd: &str) -> bool {
         | ":" | "readonly" | "trap" | "command" | "umask" | "getopts")
 }
 
-#[cfg(unix)]
 fn file_type_check_unix(path: &str, check: &str) -> bool {
     match check {
         "block" => fs::metadata(path).map(|m| m.file_type().is_block_device()).unwrap_or(false),
@@ -1552,6 +1553,22 @@ fn file_type_check_unix(path: &str, check: &str) -> bool {
         "socket" => fs::metadata(path).map(|m| m.file_type().is_socket()).unwrap_or(false),
         _ => false,
     }
+}
+
+#[cfg(not(unix))]
+trait FileTypeExt {
+    fn is_block_device(&self) -> bool;
+    fn is_char_device(&self) -> bool;
+    fn is_fifo(&self) -> bool;
+    fn is_socket(&self) -> bool;
+}
+
+#[cfg(not(unix))]
+impl FileTypeExt for std::fs::FileType {
+    fn is_block_device(&self) -> bool { false }
+    fn is_char_device(&self) -> bool { false }
+    fn is_fifo(&self) -> bool { false }
+    fn is_socket(&self) -> bool { false }
 }
 
 fn which_external(name: &str) -> Result<String, ()> {

@@ -113,6 +113,7 @@ pub trait Read {
 pub trait Write {
     fn write(&mut self, buf: &[u8]) -> Result<usize>;
     fn flush(&mut self) -> Result<()>;
+    fn by_ref(&mut self) -> &mut Self where Self: Sized { self }
 
     fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         let mut offset = 0;

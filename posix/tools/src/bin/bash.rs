@@ -145,12 +145,18 @@ impl Iterator for Lexer {
                 if self.peek() == Some('{') {
                     self.advance();
                     let name = self.parse_variable_name();
+                    if self.peek() == Some('}') {
+                        self.advance();
+                    }
                     Some(format!("${{{}}}", name))
                 } else if self.peek() == Some('(') {
                     self.advance();
                     if self.peek() == Some('(') {
                         self.advance();
                         let expr = self.collect_paren_depth();
+                        if self.peek() == Some(')') {
+                            self.advance();
+                        }
                         Some(format!("$(({}))", expr))
                     } else {
                         let cmd = self.collect_paren_depth();
@@ -184,13 +190,19 @@ impl Iterator for Lexer {
                             if self.peek() == Some('{') {
                                 self.advance();
                                 let name = self.parse_variable_name();
+                                if self.peek() == Some('}') {
+                                    self.advance();
+                                }
                                 s.push_str(&format!("${{{}}}", name));
                             } else if self.peek() == Some('(') {
                                 self.advance();
                                 if self.peek() == Some('(') {
                                     self.advance();
                                     let expr = self.collect_paren_depth();
-                                    s.push_str(&format!("$(({})", expr));
+                                    if self.peek() == Some(')') {
+                                        self.advance();
+                                    }
+                                    s.push_str(&format!("$(({}))", expr));
                                 } else {
                                     let cmd = self.collect_paren_depth();
                                     s.push_str(&format!("$({})", cmd));
@@ -226,7 +238,7 @@ impl Iterator for Lexer {
             _ => {
                 let mut w = c.to_string();
                 while let Some(ch) = self.peek() {
-                    if " \t\n;|&(){}<>!".contains(ch) {
+                    if " \t\n;|&(){}<>!$".contains(ch) {
                         break;
                     }
                     w.push(ch);
@@ -248,7 +260,7 @@ fn expand_vars(s: &str, globals: &HashMap<String, String>) -> String {
                 chars.next();
                 if let Some(&'(') = chars.peek() {
                     chars.next();
-                    let mut depth = 1;
+                    let mut depth = 2;
                     let mut expr = String::new();
                     while let Some(c) = chars.next() {
                         if c == '(' {

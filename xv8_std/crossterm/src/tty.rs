@@ -52,3 +52,12 @@ impl<S: AsRawHandle> IsTty for S {
         ok == 1
     }
 }
+
+/// On riscv64, use raw isatty syscall via xv8-libc.
+#[cfg(target_arch = "riscv64")]
+impl<S: std::os::unix::io::AsRawFd> IsTty for S {
+    fn is_tty(&self) -> bool {
+        let fd = self.as_raw_fd() as usize;
+        unsafe { xv8_libc::isatty(fd) == 1 }
+    }
+}

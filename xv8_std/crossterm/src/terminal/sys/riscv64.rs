@@ -4,6 +4,11 @@ use std::io;
 
 static TERMINAL_MODE_PRIOR_RAW: Mutex<bool> = Mutex::new(false);
 
+#[cfg(feature = "events")]
+pub fn supports_keyboard_enhancement() -> io::Result<bool> {
+    Ok(false)
+}
+
 pub(crate) fn is_raw_mode_enabled() -> bool {
     *TERMINAL_MODE_PRIOR_RAW.lock()
 }

@@ -1,5 +1,10 @@
 use std::io;
 
+#[cfg(feature = "events")]
+pub fn position() -> io::Result<(u16, u16)> {
+    Err(io::Error::new(io::ErrorKind::Unsupported, "cursor position not supported on riscv64"))
+}
+
 pub(crate) fn cursor_position(column: u16, row: u16) -> String {
     format!("\x1B[{};{}H", row + 1, column + 1)
 }
@@ -56,12 +61,13 @@ pub(crate) fn disable_blinking_cursor() -> String {
     "\x1B[?12l".to_string()
 }
 
-pub(crate) fn set_cursor_shape(shape: crate::cursor::CursorShape) -> String {
+pub(crate) fn set_cursor_shape(shape: crate::cursor::SetCursorStyle) -> String {
     match shape {
-        crate::cursor::CursorShape::Default => "\x1B[0 q".to_string(),
-        crate::cursor::CursorShape::Block => "\x1B[2 q".to_string(),
-        crate::cursor::CursorShape::UnderScore => "\x1B[4 q".to_string(),
-        crate::cursor::CursorShape::Line => "\x1B[6 q".to_string(),
+        crate::cursor::SetCursorStyle::DefaultUserShape => "\x1B[0 q".to_string(),
+        crate::cursor::SetCursorStyle::SteadyBlock => "\x1B[2 q".to_string(),
+        crate::cursor::SetCursorStyle::SteadyUnderScore => "\x1B[4 q".to_string(),
+        crate::cursor::SetCursorStyle::SteadyBar => "\x1B[6 q".to_string(),
+        _ => "\x1B[0 q".to_string(),
     }
 }
 
@@ -85,8 +91,6 @@ pub(crate) fn cursor_right() -> String {
     move_right(1)
 }
 
-/// This function is only used on Windows, but we need to have it available on all platforms.
-/// For more info see `Command::write_to` in `src/cursor.rs`.
 pub(crate) fn cursor_position_winapi(_column: u16, _row: u16) -> Result<String, io::Error> {
     Ok(cursor_position(_column, _row))
 }
