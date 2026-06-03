@@ -139,6 +139,13 @@ doctest = false
 bench = false
 
 [[bin]]
+name = "tcp_echo"
+path = "bin/tcp_echo.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
 name = "primes"
 path = "bin/primes.rs"
 test = false
@@ -218,6 +225,13 @@ bench = false
 [[bin]]
 name = "_netdns"
 path = "testbin/netdns.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_tcpecho"
+path = "testbin/tcpecho.rs"
 test = false
 doctest = false
 bench = false

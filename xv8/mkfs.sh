@@ -17,6 +17,7 @@ target/riscv64gc-unknown-none-elf/release/dns
 target/riscv64gc-unknown-none-elf/release/init
 target/riscv64gc-unknown-none-elf/release/poweroff
 target/riscv64gc-unknown-none-elf/release/primes
+target/riscv64gc-unknown-none-elf/release/tcp_echo
 target/riscv64gc-unknown-none-elf/release/udp
 target/riscv64gc-unknown-none-elf/release/uptime
 target/riscv64gc-unknown-none-elf/release/zombie
