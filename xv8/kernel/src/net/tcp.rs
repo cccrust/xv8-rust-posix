@@ -225,7 +225,20 @@ impl TcpTable {
             (entry.local_port, entry.send_seq)
         };
         transmit_tcp(remote_ip, remote_port, local_port, seq, 0, TCP_SYN, &[])?;
-        Ok(())
+
+        // Wait for handshake to complete
+        loop {
+            if proc::current_proc().is_killed() { err!(NetError::Interrupted) }
+            let mut table = TCP_TABLE.lock();
+            let entry = table.entries[id].as_mut().ok_or(NetError::BadSocket)?;
+            if matches!(entry.state, TcpState::Established) {
+                return Ok(());
+            }
+            if matches!(entry.state, TcpState::Closed) {
+                err!(NetError::ConnectionRefused)
+            }
+            table = proc::sleep(Channel::Buffer(entry as *const _ as usize), table);
+        }
     }
 
     pub fn accept(id: usize) -> Result<usize, NetError> {
