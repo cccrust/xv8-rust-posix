@@ -6,6 +6,7 @@ use crate::console::Console;
 use crate::fs::{BSIZE, FsError, Inode, Stat};
 use crate::log::Operation;
 use crate::net::ping::PingTable;
+use crate::net::tcp::TcpTable;
 use crate::net::udp::SocketTable;
 use crate::param::{MAXOPBLOCKS, NDEV, NFILE};
 use crate::pipe::Pipe;
@@ -23,6 +24,7 @@ pub enum FileType {
     Device { inode: Inode, major: u16 },
     Socket { socket_id: usize },
     Ping { socket_id: usize },
+    TcpSocket { tcp_id: usize },
 }
 
 /// File metadata protected by table-wide spinlock
@@ -138,8 +140,9 @@ impl File {
                  let _op = Operation::begin();
                  inode.put();
              }
-             FileType::Socket { socket_id } => SocketTable::close(socket_id),
-             FileType::Ping { socket_id } => {
+FileType::Socket { socket_id } => SocketTable::close(socket_id),
+            FileType::TcpSocket { tcp_id } => TcpTable::close(tcp_id),
+            FileType::Ping { socket_id } => {
                  crate::net::ping::PingTable::close(socket_id);
              }
          }
@@ -206,7 +209,7 @@ impl File {
                 None => err!(SysError::NoEntry),
             },
 
-            FileType::Socket { socket_id: _ } => {
+            FileType::Socket { socket_id: _ } | FileType::TcpSocket { tcp_id: _ } => {
                 // reads from socket should go through recv()
                 err!(SysError::BadDescriptor);
             }
@@ -274,7 +277,7 @@ impl File {
                 None => err!(SysError::NoEntry),
             },
 
-            FileType::Socket { socket_id: _ } => {
+            FileType::Socket { socket_id: _ } | FileType::TcpSocket { tcp_id: _ } => {
                 // writes to socket should go through send()
                 err!(SysError::InvalidArgument);
             }
@@ -301,6 +304,10 @@ impl File {
                 }
             }
 
+            FileType::TcpSocket { tcp_id: _ } => {
+                err!(SysError::NotImplemented)
+            }
+
             _ => err!(SysError::BadDescriptor),
         }
     }
@@ -310,7 +317,7 @@ impl File {
 
          match &file_inner.r#type {
              FileType::None => err!(SysError::BadDescriptor),
-             FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } => err!(SysError::IsDirectory),
+             FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } => err!(SysError::IsDirectory),
              FileType::Inode { .. } | FileType::Device { .. } => {
                 let new_offset = match whence {
                     0 => { // SEEK_SET

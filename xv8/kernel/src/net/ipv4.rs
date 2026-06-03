@@ -1,5 +1,7 @@
 use crate::net::interface::InterfaceId;
 use crate::net::udp;
+use crate::net::tcp;
+use crate::net::tcp::handle_tcp;
 use crate::net::{self, Be, Ipv4Addr, NetError, NetworkHeader};
 use crate::net::{icmp, internet_checksum};
 
@@ -7,6 +9,7 @@ use crate::net::{icmp, internet_checksum};
 #[repr(u8)]
 pub enum Ipv4Proto {
     Icmp = 1,
+    Tcp = 6,
     Udp = 17,
     Unknown = u8::MAX,
 }
@@ -15,6 +18,7 @@ impl From<u8> for Ipv4Proto {
     fn from(value: u8) -> Self {
         match value {
             1 => Self::Icmp,
+            6 => Self::Tcp,
             17 => Self::Udp,
             _ => Self::Unknown,
         }
@@ -125,6 +129,11 @@ pub fn handle_ipv4(interface_id: InterfaceId, packet: &[u8]) -> Result<(), NetEr
 
     match req_ipv4.proto() {
         Ipv4Proto::Icmp => log!(icmp::handle_icmp(req_ipv4.src, req_data)),
+        Ipv4Proto::Tcp => log!(handle_tcp(
+            req_ipv4.src,
+            req_ipv4.dest,
+            req_data
+        )),
         Ipv4Proto::Udp => log!(udp::handle_udp(
             interface_id,
             req_ipv4.dest,

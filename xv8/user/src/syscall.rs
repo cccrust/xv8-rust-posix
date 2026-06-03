@@ -329,6 +329,34 @@ pub mod raw {
         syscall0(Syscall::Getpagesize)
     }
 
+    pub fn tcp_socket() -> isize {
+        syscall0(Syscall::TcpSocket)
+    }
+
+    pub fn tcp_bind(fd: usize, port: u16) -> isize {
+        syscall2(Syscall::TcpBind, fd, port as usize)
+    }
+
+    pub fn tcp_listen(fd: usize) -> isize {
+        syscall1(Syscall::TcpListen, fd)
+    }
+
+    pub fn tcp_accept(fd: usize) -> isize {
+        syscall1(Syscall::TcpAccept, fd)
+    }
+
+    pub fn tcp_connect(fd: usize, dest_ip: *const u8, dest_port: u16) -> isize {
+        syscall3(Syscall::TcpConnect, fd, dest_ip as usize, dest_port as usize)
+    }
+
+    pub fn tcp_send(fd: usize, buf: *const u8, len: usize) -> isize {
+        syscall3(Syscall::TcpSend, fd, buf as usize, len)
+    }
+
+    pub fn tcp_recv(fd: usize, buf: *mut u8, len: usize) -> isize {
+        syscall3(Syscall::TcpRecv, fd, buf as usize, len)
+    }
+
     pub fn getpgid(pid: usize) -> isize {
         syscall1(Syscall::Getpgid, pid)
     }
@@ -831,4 +859,32 @@ pub fn clearenv() -> Result<(), SysError> {
 
 pub fn getpagesize() -> usize {
     raw::getpagesize() as usize
+}
+
+pub fn tcp_socket() -> Result<Fd, SysError> {
+    check(raw::tcp_socket()).map(Fd)
+}
+
+pub fn tcp_bind(fd: Fd, port: u16) -> Result<(), SysError> {
+    check_unit(raw::tcp_bind(fd.as_raw(), port))
+}
+
+pub fn tcp_listen(fd: Fd) -> Result<(), SysError> {
+    check_unit(raw::tcp_listen(fd.as_raw()))
+}
+
+pub fn tcp_accept(fd: Fd) -> Result<Fd, SysError> {
+    check(raw::tcp_accept(fd.as_raw())).map(Fd)
+}
+
+pub fn tcp_connect(fd: Fd, dest_ip: &[u8; 4], dest_port: u16) -> Result<(), SysError> {
+    check_unit(raw::tcp_connect(fd.as_raw(), dest_ip.as_ptr(), dest_port))
+}
+
+pub fn tcp_send(fd: Fd, buf: &[u8]) -> Result<usize, SysError> {
+    check(raw::tcp_send(fd.as_raw(), buf.as_ptr(), buf.len()))
+}
+
+pub fn tcp_recv(fd: Fd, buf: &mut [u8]) -> Result<usize, SysError> {
+    check(raw::tcp_recv(fd.as_raw(), buf.as_mut_ptr(), buf.len()))
 }
