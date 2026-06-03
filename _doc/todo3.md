@@ -20,17 +20,17 @@
 - 新增 `_tcpecho` 測試（TCP echo loopback 驗證）
 - 新增 `_tcpconn` 測試（TCP 連線到 QEMU gateway）
 
-## v2.2 — xv8_std/net bridge + 網路工具移植
+## v2.2 — xv8rust/net bridge + 網路工具移植
 
-### 步驟 1：xv8_std 網路層
-- `xv8_std/xv8-net/` — 最小 `std::net` 相容層
+### 步驟 1：xv8rust 網路層
+- `xv8rust/xv8-net/` — 最小 `std::net` 相容層
   - `TcpStream`（connect、read、write）
   - `UdpSocket`（bind、send_to、recv_from）
   - `lookup_host`（DNS 查詢）
 - 僅提供 `net/` 工具所需的 API，不完整實作整個 `std::net`
 
 ### 步驟 2：net/ 工具 riscv64 編譯
-- `net/libnet` 新增 `cfg` 切換：host 用 `std::net`，xv8 用 `xv8_std::net` shim
+- `net/libnet` 新增 `cfg` 切換：host 用 `std::net`，xv8 用 `xv8rust::net` shim
 - `net/tools` 新增 riscv64 targets 與 feature gate
 
 ### 步驟 3：QEMU 整合測試
@@ -42,5 +42,5 @@
 | 版本 | 主要內容 | 依賴 |
 |------|---------|------|
 | v2.1 | xv8 核心 TCP + TCP echo 測試 | v2.0 (核心穩定性) |
-| v2.2 | xv8_std/net bridge + net/ 工具移植 | v2.1 (核心 TCP) |
+| v2.2 | xv8rust/net bridge + net/ 工具移植 | v2.1 (核心 TCP) |
 | v2.3 | HTTP/TLS 支援、curl/http_server 在 xv8 執行 | v2.2 |

@@ -77,7 +77,7 @@ unsafe {
 ## 程式碼位置
 
 ```
-xv8_std/xv8-libc/src/
+xv8rust/xv8-libc/src/
 ├── lib.rs       # 入口
 ├── string.rs    # 字串函式
 ├── stdio.rs     # 標準 I/O

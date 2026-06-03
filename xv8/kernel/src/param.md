@@ -102,7 +102,7 @@ NBUF = MAXOPBLOCKS * 3 = 30
 
 ## 環境變數相關
 
-見 `env` 系統呼叫和 `xv8_std/xv8-libc-compat` 中的實現。
+見 `env` 系統呼叫和 `xv8rust/xv8-libc-compat` 中的實現。
 
 ## 相關主題
 

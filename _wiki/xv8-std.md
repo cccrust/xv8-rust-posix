@@ -1,12 +1,12 @@
 # xv8-std（std 覆寫層）
 
-xv8_std 是 xv8-rust-posix 工作區中的子專案，負責提供 Rust `std` 標準庫的實作子集，讓原本為主機設計的 POSIX 工具能夠編譯到 RISC-V 目標。
+xv8rust 是 xv8-rust-posix 工作區中的子專案，負責提供 Rust `std` 標準庫的實作子集，讓原本為主機設計的 POSIX 工具能夠編譯到 RISC-V 目標。
 
 ## 設計動機
 
 Rust 的 `std` 標準庫依賴作業系統提供的功能（檔案、網路、執行緒等）。在 `no_std` 環境（無標準庫）中，這些都不可用。
 
-xv8_std 的設計目標：
+xv8rust 的設計目標：
 - 讓 `std::fs::File`、`std::io::Read` 等抽象能在 xv8 上工作
 - 讓同一份 Rust 程式碼可以編譯到主機（macOS/Linux/x86）和 xv8（RISC-V）
 - 提供最小必要的 `std` 功能子集，不追求完整相容
@@ -14,7 +14,7 @@ xv8_std 的設計目標：
 ## 專案結構
 
 ```
-xv8_std/
+xv8rust/
 ├── Cargo.toml          # 工作區清單
 ├── xv8-user-std/       # Rust std 覆寫層
 │   ├── Cargo.toml
@@ -169,7 +169,7 @@ kernel syscall (ecall)
 
 ## crossterm 整合
 
-xv8_std 包含了 crossterm 的 vendored 版本（0.29.0），用於 vi/vim 等終端應用。在 RISC-V 上編譯時使用 `--no-default-features` 排除主機特定功能。
+xv8rust 包含了 crossterm 的 vendored 版本（0.29.0），用於 vi/vim 等終端應用。在 RISC-V 上編譯時使用 `--no-default-features` 排除主機特定功能。
 
 ## 編譯目標
 

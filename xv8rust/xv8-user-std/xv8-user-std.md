@@ -81,7 +81,7 @@ static ALLOC: SomeAllocator = SomeAllocator::new();
 POSIX 工具在 RISC-V 目標時：
 ```toml
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-std = { package = "xv8-user-std", path = "../../xv8_std/xv8-user-std" }
+std = { package = "xv8-user-std", path = "../../xv8rust/xv8-user-std" }
 ```
 
 ## 底層呼叫鏈

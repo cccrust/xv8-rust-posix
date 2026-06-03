@@ -2,6 +2,7 @@ use alloc::string::{String, ToString};
 use core::mem::size_of;
 use crate::io::Read;
 use crate::ffi::CString;
+use crate::os::unix::io::{AsFd, BorrowedFd};
 
 #[derive(Clone)]
 pub struct Metadata {
@@ -93,6 +94,7 @@ impl File {
     pub fn sync_all(&self) -> super::io::Result<()> { Ok(()) }
     pub fn sync_data(&self) -> super::io::Result<()> { Ok(()) }
     pub fn set_len(&self, _size: u64) -> super::io::Result<()> { Ok(()) }
+    pub fn as_raw_fd(&self) -> usize { self.fd }
 }
 
 impl super::io::Read for File {
@@ -125,6 +127,12 @@ impl super::io::Seek for File {
         };
         let n = xv8_libc::lseek(self.fd, offset, whence);
         if n < 0 { Err(super::io::ErrorKind::Other.into()) } else { Ok(n as u64) }
+    }
+}
+
+impl AsFd for File {
+    fn as_fd(&self) -> BorrowedFd<'_> {
+        unsafe { BorrowedFd::borrow_raw(self.as_raw_fd() as i32) }
     }
 }
 

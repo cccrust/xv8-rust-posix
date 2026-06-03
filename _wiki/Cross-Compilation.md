@@ -76,7 +76,7 @@ fi
 
 ## build-std 機制
 
-xv8_std 和 posix 需要完整的核心庫才能編譯。在 `config.toml` 中：
+xv8rust 和 posix 需要完整的核心庫才能編譯。在 `config.toml` 中：
 
 ```toml
 [build]
@@ -93,10 +93,10 @@ codegen-units = 1
 
 ## 編譯命令
 
-### 編譯 xv8_std
+### 編譯 xv8rust
 
 ```bash
-cargo build --release --manifest-path xv8_std/Cargo.toml --target riscv64gc-unknown-none-elf
+cargo build --release --manifest-path xv8rust/Cargo.toml --target riscv64gc-unknown-none-elf
 ```
 
 ### 編譯 POSIX 工具
@@ -174,7 +174,7 @@ rustup target add riscv64gc-unknown-none-elf
 
 ### no_std 恐慌
 
-`no_std` 程式遇到 panic 時會直接停止。xv8_std 提供自訂 panic handler：
+`no_std` 程式遇到 panic 時會直接停止。xv8rust 提供自訂 panic handler：
 ```rust
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
@@ -197,7 +197,7 @@ nightly 版本提供 `no_std` 和內嵌組語等穩定前功能。
 
 ## 與 xv8-std 的整合
 
-交叉編譯時，`xv8_std/Cargo.toml` 指定的依賴（如 `libc`、`alloc`）都需要有 `no_std` 版本。xv8-libc-compat 提供 `libc` 的 `no_std` 實作。
+交叉編譯時，`xv8rust/Cargo.toml` 指定的依賴（如 `libc`、`alloc`）都需要有 `no_std` 版本。xv8-libc-compat 提供 `libc` 的 `no_std` 實作。
 
 ## 相關主題
 

@@ -76,14 +76,14 @@ Panic 時輸出訊息並以退出碼 1 終止。
 - 使用 RISC-V ecall 指令發起系統呼叫
 - 透過 `abi` module 共享類型定義
 
-## 與 xv8_std 的差異
+## 與 xv8rust 的差異
 
 `user` crate：
 - 核心模式（無標準庫）
 - 直接系統呼叫
 - 輕量級
 
-`xv8_std`：
+`xv8rust`：
 - 使用者模式（有標準庫）
 - POSIX 相容包裝
 - 豐富功能

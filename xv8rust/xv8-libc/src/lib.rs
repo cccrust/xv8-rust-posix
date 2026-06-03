@@ -7,6 +7,10 @@ pub use raw::{read, write, open, close, lseek, fstat, exit, getpid, chdir, sbrk,
 pub use raw::{fork, exec, dup, dup2, pipe, wait, readlink, getenv, setenv, unsetenv, clearenv};
 pub use raw::{socket, send, receive, ioctl, tcgetattr, tcsetattr};
 pub use raw::{unlink, link, rename, chmod, fchmod, chown, fchown, access, symlink, truncate, ftruncate, getuid, getgid};
+pub use raw::{
+    tcp_socket, tcp_bind, tcp_listen, tcp_accept, tcp_connect, tcp_send, tcp_recv,
+};
+pub use raw::{sleep, uptime, time, nanosleep, clock_gettime, clock_getres, clock_settime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fd(usize);

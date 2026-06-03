@@ -7,7 +7,7 @@
 ## 核心架構
 
 ```
-xv8_std/
+xv8rust/
 ├── user.ld                # linker script（從 xv8/user.ld 複製）
 ├── xv8-libc/              # no_std 獨立 ecall wrapper
 │   └── src/
@@ -36,7 +36,7 @@ xv8_std/
 
 ```toml
 [target.riscv64gc-unknown-none-elf.dependencies]
-std = { package = "xv8-user-std", path = "../../xv8_std/xv8-user-std" }
+std = { package = "xv8-user-std", path = "../../xv8rust/xv8-user-std" }
 ```
 
 加上 linker script 和 build-std：
@@ -44,7 +44,7 @@ std = { package = "xv8-user-std", path = "../../xv8_std/xv8-user-std" }
 ```toml
 # posix/.cargo/config.toml
 [target.riscv64gc-unknown-none-elf]
-rustflags = ["-C", "link-arg=-T../xv8_std/user.ld"]
+rustflags = ["-C", "link-arg=-T../xv8rust/user.ld"]
 
 [unstable]
 build-std = ["core", "compiler_builtins", "alloc"]
@@ -76,20 +76,20 @@ build-std = ["core", "compiler_builtins", "alloc"]
 - `ipcrm` 補齊 `null_mut::<c_void>()` 型別註記，避免泛型指標推導失敗
 
 ### v0.5（已完成）
-- 整理 `xv8_std` 目前仍可消除的警告
+- 整理 `xv8rust` 目前仍可消除的警告
 - 實作 `fs::read_link` 的真實 syscall 路徑
 - 實作 `process::Command::spawn` 的真實 syscall 路徑
 - 持續補齊 runtime 行為，讓更多工具不只「能編譯」，也能「能執行」
 
 ### v0.6（已完成）
-- 建立根目錄 `test.sh`，串起 `posix`、`xv8_std`、`xv8` 三段驗證
+- 建立根目錄 `test.sh`，串起 `posix`、`xv8rust`、`xv8` 三段驗證
 - 加入 `rustc-wrapper`，讓 `posix/tools` 的 xv8 target bin 自動帶上 `no_main`
 - 修正 `basic.rs` 的工具路徑解析，避免測到系統 `mailx`
 - 修正 `ipcrm.rs` 的 shm/sem 指標型別，讓 target build 穩定通過
-- 完成整體驗證：`posix` host tests、`posix` target build、`xv8_std` target build、`xv8` integration tests 全過
+- 完成整體驗證：`posix` host tests、`posix` target build、`xv8rust` target build、`xv8` integration tests 全過
 
 ### v1.0（已完成）
-- 供應商化 crossterm 0.29.0 到 `xv8_std/crossterm/`
+- 供應商化 crossterm 0.29.0 到 `xv8rust/crossterm/`
 - 新增 riscv64 terminal backend（ioctl CONSOLE_SET_RAW, 80×24 預設視窗）
 - `spin::Once` 取代 `parking_lot::Once` for riscv64
 - xv8-libc 新增 `ioctl`、`tcgetattr`、`tcsetattr` syscall wrappers

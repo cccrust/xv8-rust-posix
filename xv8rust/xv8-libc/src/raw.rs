@@ -52,6 +52,17 @@ pub enum Syscall {
     Send = 25,
     Receive = 26,
     Time = 66,
+    Nanosleep = 67,
+    ClockGetTime = 68,
+    ClockGetRes = 69,
+    ClockSetTime = 70,
+    TcpSocket = 108,
+    TcpBind = 109,
+    TcpListen = 110,
+    TcpAccept = 111,
+    TcpConnect = 112,
+    TcpSend = 113,
+    TcpRecv = 114,
 }
 
 #[inline(always)]
@@ -115,6 +126,34 @@ fn syscall5(syscall: Syscall, a0: usize, a1: usize, a2: usize, a3: usize, a4: us
 
 pub fn socket(port: u16) -> isize {
     syscall1(Syscall::Socket, port as usize)
+}
+
+pub fn tcp_socket() -> isize {
+    syscall1(Syscall::TcpSocket, 0)
+}
+
+pub fn tcp_bind(fd: usize, port: u16) -> isize {
+    syscall2(Syscall::TcpBind, fd, port as usize)
+}
+
+pub fn tcp_listen(fd: usize) -> isize {
+    syscall1(Syscall::TcpListen, fd)
+}
+
+pub fn tcp_accept(fd: usize) -> isize {
+    syscall1(Syscall::TcpAccept, fd)
+}
+
+pub fn tcp_connect(fd: usize, dest_ip: *const u8, dest_port: u16) -> isize {
+    syscall3(Syscall::TcpConnect, fd, dest_ip as usize, dest_port as usize)
+}
+
+pub fn tcp_send(fd: usize, buf: *const u8, len: usize) -> isize {
+    syscall3(Syscall::TcpSend, fd, buf as usize, len)
+}
+
+pub fn tcp_recv(fd: usize, buf: *mut u8, len: usize) -> isize {
+    syscall3(Syscall::TcpRecv, fd, buf as usize, len)
 }
 
 pub fn send(fd: usize, buf: *const u8, len: usize, dest_ip: *const u8, dest_port: u16) -> isize {
@@ -218,6 +257,14 @@ pub fn getenv(name: *const u8, buf: *mut u8, len: usize) -> isize {
     syscall3(Syscall::Getenv, name as usize, buf as usize, len)
 }
 
+pub fn sleep(ticks: usize) -> isize {
+    syscall1(Syscall::Sleep, ticks)
+}
+
+pub fn uptime() -> isize {
+    syscall1(Syscall::Uptime, 0)
+}
+
 pub fn setenv(name: *const u8, value: *const u8, overwrite: isize) -> isize {
     syscall3(Syscall::Setenv, name as usize, value as usize, overwrite as usize)
 }
@@ -300,6 +347,26 @@ pub fn getuid() -> isize {
 
 pub fn getgid() -> isize {
     syscall1(Syscall::Getgid, 0)
+}
+
+pub fn time(t: *mut u32) -> isize {
+    syscall1(Syscall::Time, t as usize)
+}
+
+pub fn nanosleep(req: *const u8, rem: *mut u8) -> isize {
+    syscall2(Syscall::Nanosleep, req as usize, rem as usize)
+}
+
+pub fn clock_gettime(clock_id: usize, ts: *mut u8) -> isize {
+    syscall2(Syscall::ClockGetTime, clock_id, ts as usize)
+}
+
+pub fn clock_getres(clock_id: usize, ts: *mut u8) -> isize {
+    syscall2(Syscall::ClockGetRes, clock_id, ts as usize)
+}
+
+pub fn clock_settime(clock_id: usize, ts: *const u8) -> isize {
+    syscall2(Syscall::ClockSetTime, clock_id, ts as usize)
 }
 
 #[repr(C)]

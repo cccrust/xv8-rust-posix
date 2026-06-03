@@ -110,6 +110,6 @@ net/ 子專案包含 13 個主機端網路工具，使用 `std::net` 實作：
 
 ## v2.2 待辦事項
 
-1. 建立 xv8_std/net bridge：最小 std::net 相容層
+1. 建立 xv8rust/net bridge：最小 std::net 相容層
 2. 將 net/ 工具（tcpclient, tcpserver, dns, ntp, whois）逐步移植到 xv8
 3. 新增 QEMU 測試：TCP 外部連線驗證

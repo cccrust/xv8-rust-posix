@@ -1,9 +1,24 @@
 use alloc::boxed::Box;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
 
 pub type Result<T> = core::result::Result<T, Error>;
+
+pub struct IoSlice<'a>(&'a [u8]);
+pub struct IoSliceMut<'a>(&'a mut [u8]);
+
+impl<'a> IoSlice<'a> {
+    pub fn new(buf: &'a [u8]) -> Self { Self(buf) }
+    pub fn as_ref(&self) -> &'a [u8] { self.0 }
+    pub fn len(&self) -> usize { self.0.len() }
+}
+
+impl<'a> IoSliceMut<'a> {
+    pub fn new(buf: &'a mut [u8]) -> Self { Self(buf) }
+    pub fn as_mut(&mut self) -> &mut [u8] { &mut *self.0 }
+    pub fn len(&self) -> usize { self.0.len() }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ErrorKind {
@@ -32,28 +47,61 @@ pub enum ErrorKind {
 #[derive(Debug, Clone)]
 pub struct Error {
     kind: ErrorKind,
-    message: Option<&'static str>,
+    message: Option<String>,
+    raw: Option<i32>,
 }
 
 impl Error {
     pub fn new(kind: ErrorKind, message: &'static str) -> Self {
-        Error { kind, message: Some(message) }
+        Error { kind, message: Some(message.to_string()), raw: None }
     }
     pub fn kind(&self) -> ErrorKind { self.kind.clone() }
+    pub fn raw_os_error(&self) -> Option<i32> { self.raw }
+    pub fn from_raw_os_error(code: i32) -> Self {
+        Error {
+            kind: error_kind_from_errno(code),
+            message: None,
+            raw: Some(code),
+        }
+    }
     pub fn last_os_error() -> Self {
-        Error { kind: ErrorKind::Other, message: Some("os error") }
+        Error { kind: ErrorKind::Other, message: Some("os error".to_string()), raw: None }
+    }
+    pub fn other<M: core::fmt::Display>(message: M) -> Self {
+        Error { kind: ErrorKind::Other, message: Some(message.to_string()), raw: None }
     }
 }
 
 impl From<ErrorKind> for Error {
     fn from(kind: ErrorKind) -> Self {
-        Error { kind, message: None }
+        Error { kind, message: None, raw: None }
+    }
+}
+
+fn error_kind_from_errno(code: i32) -> ErrorKind {
+    match code {
+        1 => ErrorKind::PermissionDenied,
+        2 => ErrorKind::NotFound,
+        4 => ErrorKind::Interrupted,
+        6 => ErrorKind::Interrupted,
+        9 => ErrorKind::InvalidInput,
+        11 => ErrorKind::WouldBlock,
+        12 => ErrorKind::OutOfMemory,
+        13 => ErrorKind::Interrupted,
+        17 => ErrorKind::AlreadyExists,
+        22 => ErrorKind::InvalidInput,
+        32 => ErrorKind::BrokenPipe,
+        104 => ErrorKind::ConnectionReset,
+        110 => ErrorKind::TimedOut,
+        111 => ErrorKind::ConnectionRefused,
+        95 => ErrorKind::Unsupported,
+        _ => ErrorKind::Other,
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.message {
+        match &self.message {
             Some(message) => write!(f, "{}", message),
             None => write!(f, "{:?}", self.kind),
         }
@@ -66,6 +114,16 @@ impl crate::error::Error for Error {
 
 pub trait Read {
     fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> Result<usize> {
+        for buf in bufs {
+            let slice = buf.as_mut();
+            if !slice.is_empty() {
+                return self.read(slice);
+            }
+        }
+        Ok(0)
+    }
 
     fn read_to_end(&mut self, buf: &mut Vec<u8>) -> Result<usize> {
         let mut tmp = [0u8; 1024];
@@ -114,6 +172,16 @@ pub trait Write {
     fn write(&mut self, buf: &[u8]) -> Result<usize>;
     fn flush(&mut self) -> Result<()>;
     fn by_ref(&mut self) -> &mut Self where Self: Sized { self }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> Result<usize> {
+        for buf in bufs {
+            let slice = buf.as_ref();
+            if !slice.is_empty() {
+                return self.write(slice);
+            }
+        }
+        Ok(0)
+    }
 
     fn write_all(&mut self, buf: &[u8]) -> Result<()> {
         let mut offset = 0;

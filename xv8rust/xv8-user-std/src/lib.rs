@@ -140,10 +140,7 @@ pub mod convert {
     pub use core::convert::*;
 }
 
-pub mod sync {
-    pub use core::sync::*;
-    pub use alloc::sync::Arc;
-}
+pub mod sync;
 
 pub mod prelude {
     pub mod rust_2021 {
@@ -177,5 +174,10 @@ pub mod os {
     pub mod unix {
         pub mod fs;
         pub mod io;
+    }
+    pub mod fd {
+        pub use super::unix::io::{
+            AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd,
+        };
     }
 }

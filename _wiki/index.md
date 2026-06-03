@@ -7,7 +7,7 @@
 xv8-rust-posix 是一個多專案的 Rust 工作區，包含：
 - **xv8 OS**：RISC-V Unix-like 作業系統
 - **posix/**：100+ POSIX 工具 + shell
-- **xv8_std/**：std 覆寫層，讓 POSIX 工具能在 riscv64 編譯
+- **xv8rust/**：std 覆寫層，讓 POSIX 工具能在 riscv64 編譯
 - **net/**：網路工具（ping, dns, tcp, echo, ntp, whois）
 
 ## 目錄索引

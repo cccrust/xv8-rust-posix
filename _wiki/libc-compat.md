@@ -1,6 +1,6 @@
 # libc-compat（libc 相容層）
 
-xv8-libc-compat 是 xv8_std 子專案中的一個 crate，讓 POSIX 工具可以透過統一的 `libc` 名稱來存取系統呼叫或 libc 函式。
+xv8-libc-compat 是 xv8rust 子專案中的一個 crate，讓 POSIX 工具可以透過統一的 `libc` 名稱來存取系統呼叫或 libc 函式。
 
 ## 設計動機
 
@@ -13,7 +13,7 @@ POSIX 工具（如 `cat`、`ls`、`grep`）依賴標準 C 庫函式（如 `open`
 
 ```toml
 [dependencies]
-libc = { path = "../xv8_std/xv8-libc-compat" }
+libc = { path = "../xv8rust/xv8-libc-compat" }
 ```
 
 這使同一份程式碼可以無縫編譯到兩個目標。

@@ -40,7 +40,7 @@ pub fn write(fd: i32, buf: *const u8, len: usize) -> isize {
 
 `posix/tools/Cargo.toml`：
 ```toml
-libc = { package = "xv8-libc-compat", path = "../../xv8_std/xv8-libc-compat" }
+libc = { package = "xv8-libc-compat", path = "../../xv8rust/xv8-libc-compat" }
 ```
 
 POSIX 工具通過此包裝使用系統呼叫。

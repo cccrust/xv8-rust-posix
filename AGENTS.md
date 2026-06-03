@@ -6,7 +6,7 @@ Multi-project Rust workspace (NOT a root Cargo workspace). Four independent work
 |---------|-----|------|
 | xv8 OS | `xv8/` | RISC-V Unix-like OS (nightly + `qemu-system-riscv64`) |
 | POSIX tools | `posix/` | 124 POSIX utilities + shell |
-| xv8 std | `xv8_std/` | std overlay so POSIX tools compile for riscv64 |
+| xv8 std | `xv8rust/` | std overlay so POSIX tools compile for riscv64 |
 | Network tools | `net/` | ping, dns, tcp, echo, ntp, whois, http, curl, ssh |
 
 ## Key Commands
@@ -23,14 +23,14 @@ cd net   && ./test.sh             # Network smoke (dns, ntp, tcp echo, whois)
 
 ## Architecture Gotchas
 
-- **No root Cargo.toml** — each subproject (`xv8/`, `posix/`, `xv8_std/`, `net/`) is its own workspace
+- **No root Cargo.toml** — each subproject (`xv8/`, `posix/`, `xv8rust/`, `net/`) is its own workspace
 - **`.cargo/rustc-wrapper.sh`** (root `[build]` config) — injects `#![no_main]` + `#[no_mangle]` on `src/bin/*.rs` when targeting riscv64. This is what lets POSIX tools compile unchanged for both host and RISC-V.
 - **`posix/.cargo/config.toml`** — riscv64 cross-compile config (target, linker, `build-std`). **`test_posix_host.sh` stashes this to `.bak`** to avoid host build conflicts, then restores it. If host builds fail, check if this file is missing.
-- **`libc` → `xv8-libc-compat`** — `posix/tools/Cargo.toml` imports `libc` which resolves to `xv8_std/xv8-libc-compat`. On riscv64 provides syscall wrappers; on host delegates to real `libc`.
-- **`crossterm` → `xv8_std/crossterm/`** — vendored crossterm 0.29.0. Enables vi/vim on host. riscv64 uses `--no-default-features` to exclude it (`vi`/`vim` have `required-features = ["crossterm"]`).
+- **`libc` → `xv8-libc-compat`** — `posix/tools/Cargo.toml` imports `libc` which resolves to `xv8rust/xv8-libc-compat`. On riscv64 provides syscall wrappers; on host delegates to real `libc`.
+- **`crossterm` → `xv8rust/crossterm/`** — vendored crossterm 0.29.0. Enables vi/vim on host. riscv64 uses `--no-default-features` to exclude it (`vi`/`vim` have `required-features = ["crossterm"]`).
 - **`riscv64gc-unknown-none-elf` is neither `cfg(unix)` nor `cfg(windows)`** — platform-specific code must check `target_arch`.
 - **Toolchain**: nightly + target `riscv64gc-unknown-none-elf` (set in `xv8/rust-toolchain.toml`)
-- **Resolver mismatch**: `net/` uses resolver `"2"`, `posix/` and `xv8_std/` use `"3"`
+- **Resolver mismatch**: `net/` uses resolver `"2"`, `posix/` and `xv8rust/` use `"3"`
 - **xv8 release profile**: `lto = true`, `strip = true`, `codegen-units = 1`
 - **`posix/AGENTS.md` mentions `libposix/` directory — it does not exist**. The workspace has members `["tools"]` only. `tools/src/lib.rs` is the shared library.
 
@@ -38,7 +38,7 @@ cd net   && ./test.sh             # Network smoke (dns, ntp, tcp echo, whois)
 
 ```bash
 cargo build --release --manifest-path posix/Cargo.toml --target riscv64gc-unknown-none-elf --no-default-features
-cargo build --release --manifest-path xv8_std/Cargo.toml --target riscv64gc-unknown-none-elf
+cargo build --release --manifest-path xv8rust/Cargo.toml --target riscv64gc-unknown-none-elf
 cargo build --release -p tools --target riscv64gc-unknown-none-elf --features crossterm  # for vi/vim
 ```
 
@@ -64,7 +64,7 @@ cd posix && cargo build --release && PATH="target/release:$PATH" sh tools/tests/
 
 ## net/ Cross-Platform Design
 
-`net/libnet/` uses `std::net` on host (linux/mac). For xv8 target, the kernel provides its own net stack (Ethernet, ARP, IPv4, UDP, ICMP, DHCP, TCP) with syscall wrappers. `xv8_std/xv8-libc-compat` bridges the gap. TCP is fully functional on loopback (v2.1, 11/11 QEMU tests pass).
+`net/libnet/` uses `std::net` on host (linux/mac). For xv8 target, the kernel provides its own net stack (Ethernet, ARP, IPv4, UDP, ICMP, DHCP, TCP) with syscall wrappers. `xv8rust/xv8-libc-compat` bridges the gap. TCP is fully functional on loopback (v2.1, 11/11 QEMU tests pass).
 
 ## Planning & Docs
 
