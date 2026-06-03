@@ -49,13 +49,9 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 
 ---
 
-## v1.8 — iconv 改進
+## v1.8 — iconv 改進 ✅
 
-**目標：改善編碼轉換支援。**
-
-| 項目 | 說明 |
-|------|------|
-| `iconv` 編碼擴充 | 支援更多編碼轉換（UTF-16, ISO-8859-15, CP1252, CP437, KOI8-R 等） |
+**已於 `_doc/v1.8.md` 記錄。**
 
 ---
 
