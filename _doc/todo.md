@@ -55,11 +55,21 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 
 ---
 
-## v1.9+ — 剩餘選用工具
+## v2.0 — users/who 強化 + 小型選用工具 ✅
 
-~30 個 XSI/UP/SD 選用工具，視需求逐步實作。
+**已於 `_doc/v2.0.md` 記錄。** who 強化（支援 -a、-b、-H、-q、-r、-T、-u）、users 強化（libc 正規 API）、last/rev/col/look 新增。12 項測試全部通過。
 
 ---
+
+## v2.1 — xv8 核心網路強化（TCP、HTTP、TLS）
+
+**規劃中，見 `_doc/todo2.md`。**
+
+---
+
+## v2.2 — 網路工具整合（curl、ssh、https）
+
+**規劃中，見 `_doc/todo2.md`。**
 
 ## 版本對照
 
@@ -71,4 +81,6 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 | v1.6 | riscv64 crossterm (xv8-user-std 擴充) | v1.5 (riscv64 環境) |
 | v1.7 | ex, fc | v1.3 (shell 依賴) |
 | v1.8 | iconv 編碼擴充 | 無 |
-| v1.9+ | 剩餘選用工具 | 視工具而定 |
+| v2.0 | users/who 強化 + rev/col/look/last | 無 |
+| v2.1 | xv8 核心網路（TCP、HTTP、TLS） | v2.0 |
+| v2.2 | 網路工具整合（curl、ssh、https） | v2.1 |

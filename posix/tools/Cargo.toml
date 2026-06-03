@@ -603,3 +603,21 @@ path = "src/bin/fc.rs"
 [[bin]]
 name = "test_dir"
 path = "src/bin/test_dir.rs"
+
+# ─── v2.0: User / Login Tools ─────────────────────────────────────────────
+
+[[bin]]
+name = "last"
+path = "src/bin/last.rs"
+
+[[bin]]
+name = "look"
+path = "src/bin/look.rs"
+
+[[bin]]
+name = "rev"
+path = "src/bin/rev.rs"
+
+[[bin]]
+name = "col"
+path = "src/bin/col.rs"
