@@ -187,12 +187,14 @@ impl TcpTable {
 
     pub fn bind(id: usize, port: u16) -> Result<(), NetError> {
         let mut table = TCP_TABLE.lock();
-        let Some(ref mut entry) = table.entries[id] else { err!(NetError::BadSocket) };
-        if entry.local_port != 0 { err!(NetError::AlreadyExists) }
+        if table.entries[id].is_none() { err!(NetError::BadSocket) }
+        if table.entries[id].as_ref().unwrap().local_port != 0 { err!(NetError::AlreadyExists) }
         let bind_port = if port == 0 { table.alloc_port() } else { port };
         if let Some(_conflict) = table.find_listener(bind_port) { err!(NetError::PortInUse) }
-        entry.local_port = bind_port;
-        entry.state = TcpState::Listen;
+        if let Some(entry) = table.entries[id].as_mut() {
+            entry.local_port = bind_port;
+            entry.state = TcpState::Listen;
+        }
         Ok(())
     }
 
@@ -205,19 +207,23 @@ impl TcpTable {
     }
 
     pub fn connect(id: usize, remote_ip: Ipv4Addr, remote_port: u16) -> Result<(), NetError> {
-        let local_port;
-        let seq;
-        {
+        let (local_port, seq) = {
             let mut table = TCP_TABLE.lock();
-            let Some(ref mut entry) = table.entries[id] else { err!(NetError::BadSocket) };
-            if entry.local_port == 0 { entry.local_port = table.alloc_port(); }
+            if table.entries[id].is_none() { err!(NetError::BadSocket) }
+            let needs_port = table.entries[id].as_ref().unwrap().local_port == 0;
+            if needs_port {
+                let p = table.alloc_port();
+                if let Some(entry) = table.entries[id].as_mut() {
+                    entry.local_port = p;
+                }
+            }
+            let entry = table.entries[id].as_mut().ok_or(NetError::BadSocket)?;
             entry.remote_ip = remote_ip;
             entry.remote_port = remote_port;
             entry.send_seq = 1000;
             entry.state = TcpState::SynSent;
-            local_port = entry.local_port;
-            seq = entry.send_seq;
-        }
+            (entry.local_port, entry.send_seq)
+        };
         transmit_tcp(remote_ip, remote_port, local_port, seq, 0, TCP_SYN, &[])?;
         Ok(())
     }
@@ -226,15 +232,21 @@ impl TcpTable {
         loop {
             if proc::current_proc().is_killed() { err!(NetError::Interrupted) }
 
-            let mut table = TCP_TABLE.lock();
-            let Some(ref mut entry) = table.entries[id] else { err!(NetError::BadSocket) };
-            if !matches!(entry.state, TcpState::Listen) { err!(NetError::InvalidAddress) }
-
-            if !entry.backlog.is_empty() {
-                return Ok(entry.backlog.remove(0));
+            let backlog_id = {
+                let mut table = TCP_TABLE.lock();
+                let entry = table.entries[id].as_mut().ok_or(NetError::BadSocket)?;
+                if !matches!(entry.state, TcpState::Listen) { err!(NetError::InvalidAddress) }
+                if entry.backlog.is_empty() {
+                    let ptr = entry as *const _ as usize;
+                    let _ = entry;
+                    table = proc::sleep(Channel::Buffer(ptr), table);
+                    continue;
+                }
+                Some(entry.backlog.remove(0))
+            };
+            if let Some(child_id) = backlog_id {
+                return Ok(child_id);
             }
-
-            table = proc::sleep(Channel::Buffer(entry as *const _ as usize), table);
         }
     }
 
@@ -339,13 +351,12 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
     if has_syn && has_ack {
         let mut table = TCP_TABLE.lock();
         for (id, entry) in table.entries.iter_mut().enumerate() {
-            if let Some(ref mut c) = entry {
+            if let Some(c) = entry {
                 if matches!(c.state, TcpState::SynSent) && c.remote_ip == src_ip && c.remote_port == src_port {
                     c.state = TcpState::Established;
                     c.send_seq = ack;
                     c.recv_seq = seq.wrapping_add(1);
                     proc::wakeup(Channel::Buffer(c as *const _ as usize));
-                    return Ok(());(Channel::Buffer(c as *const _ as usize));
                     return Ok(());
                 }
             }
@@ -357,21 +368,21 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
     if has_ack && !has_syn && !has_fin {
         let mut table = TCP_TABLE.lock();
         for child_id in 0..NTCP {
-            let mut complete = false;
-            if let Some(ref mut c) = table.entries[child_id] {
-                if matches!(c.state, TcpState::SynReceived) && c.remote_ip == src_ip && c.remote_port == src_port {
+            let local_port = table.entries[child_id].as_ref()
+                .filter(|c| matches!(c.state, TcpState::SynReceived) && c.remote_ip == src_ip && c.remote_port == src_port)
+                .map(|c| c.local_port);
+            if let Some(lport) = local_port {
+                if let Some(c) = table.entries[child_id].as_mut() {
                     c.state = TcpState::Established;
-                    // Find the listener and add to backlog
-                    if let Some(listener) = table.find_listener(c.local_port) {
-                        if let Some(ref mut p) = table.entries[listener] {
-                            p.backlog.push(child_id);
-                            proc::wakeup(Channel::Buffer(p as *const _ as usize));
-                        }
-                    }
-                    complete = true;
                 }
+                if let Some(listener) = table.find_listener(lport) {
+                    if let Some(p) = table.entries[listener].as_mut() {
+                        p.backlog.push(child_id);
+                        proc::wakeup(Channel::Buffer(p as *const _ as usize));
+                    }
+                }
+                break;
             }
-            if complete { break; }
         }
         return Ok(());
     }
