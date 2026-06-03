@@ -26,6 +26,10 @@ cd net   && ./test.sh   # Network tools smoke tests
 - **No root Cargo.toml** — each subproject is its own workspace
 - **`.cargo/rustc-wrapper.sh`** — injects `#![no_main]` and `#[no_mangle]` for `src/bin/*.rs` when targeting `riscv64gc-unknown-none-elf`. This is what allows POSIX tools to compile for both host and RISC-V without source changes.
 - **`libc` → `xv8-libc-compat`** — `posix/tools/Cargo.toml` depends on `libc` which resolves to `xv8_std/xv8-libc-compat`. On `riscv64` this provides minimal syscall wrappers; on host it delegates to real `libc`.
+- **`crossterm` → `xv8_std/crossterm/`** — vendored crossterm 0.29.0. All platforms use this path. Default feature `crossterm` enables vi/vim on host; riscv64 build uses `--no-default-features` to exclude it (vi/vim have `required-features = ["crossterm"]`).
+- **`spin` replaces `parking_lot` on riscv64** — vendored crossterm uses `spin::Once` instead of `parking_lot::Once` when `target_arch = "riscv64"` (in `style/types/colored.rs`).
+- **riscv64 terminal backend** — `xv8_std/crossterm/src/terminal/sys/riscv64.rs` uses `xv8_libc::ioctl` with `CONSOLE_SET_RAW` (kernel ioctl #1). Default window: 80×24.
+- **`riscv64gc-unknown-none-elf` is neither `cfg(unix)` nor `cfg(windows)`** — platform-specific crossterm code is excluded unless riscv64-specific backends are added.
 - **Toolchain**: nightly + target `riscv64gc-unknown-none-elf`
 - **QEMU**: qemu-system-riscv64, virt machine, 256M, 4 cores, E1000 NIC, virtio-blk
 

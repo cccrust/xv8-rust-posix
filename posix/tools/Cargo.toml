@@ -3,9 +3,13 @@ name = "tools"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["crossterm"]
+crossterm = ["dep:crossterm"]
+
 [dependencies]
 libc = { package = "xv8-libc-compat", path = "../../xv8_std/xv8-libc-compat" }
-crossterm = "0.27"
+crossterm = { package = "crossterm", path = "../../xv8_std/crossterm", optional = true }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 std = { package = "xv8-user-std", path = "../../xv8_std/xv8-user-std" }
@@ -557,11 +561,12 @@ path = "src/bin/crontab.rs"
 [[bin]]
 name = "vi"
 path = "src/bin/vim.rs"
+required-features = ["crossterm"]
 
 [[bin]]
 name = "vim"
 path = "src/bin/vim.rs"
-
+required-features = ["crossterm"]
 
 
 [[bin]]

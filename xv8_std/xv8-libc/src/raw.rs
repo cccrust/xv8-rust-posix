@@ -25,6 +25,8 @@ pub enum Syscall {
     Clearenv = 106,
     Sbrk = 12,
     Isatty = 59,
+    Tcgetattr = 60,
+    Tcsetattr = 61,
     Unlink = 18,
     Link = 19,
     Chmod = 31,
@@ -234,6 +236,18 @@ pub fn sbrk(n: isize) -> isize {
 
 pub fn isatty(fd: usize) -> isize {
     syscall1(Syscall::Isatty, fd)
+}
+
+pub fn ioctl(fd: usize, cmd: usize, arg: usize) -> isize {
+    syscall3(Syscall::Ioctl, fd, cmd, arg)
+}
+
+pub fn tcgetattr(fd: usize, termios: *mut usize) -> isize {
+    syscall2(Syscall::Tcgetattr, fd, termios as usize)
+}
+
+pub fn tcsetattr(fd: usize, action: usize, termios: *const usize) -> isize {
+    syscall3(Syscall::Tcsetattr, fd, action, termios as usize)
 }
 
 pub fn unlink(path: *const u8) -> isize {

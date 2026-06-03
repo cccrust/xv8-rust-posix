@@ -88,6 +88,16 @@ build-std = ["core", "compiler_builtins", "alloc"]
 - 修正 `ipcrm.rs` 的 shm/sem 指標型別，讓 target build 穩定通過
 - 完成整體驗證：`posix` host tests、`posix` target build、`xv8_std` target build、`xv8` integration tests 全過
 
+### v1.0（已完成）
+- 供應商化 crossterm 0.29.0 到 `xv8_std/crossterm/`
+- 新增 riscv64 terminal backend（ioctl CONSOLE_SET_RAW, 80×24 預設視窗）
+- `spin::Once` 取代 `parking_lot::Once` for riscv64
+- xv8-libc 新增 `ioctl`、`tcgetattr`、`tcsetattr` syscall wrappers
+- 修正 sh.rs heredoc（多行累積、quoted delimiter tokenizer 缺字、pipeline heredoc 內容遺失）
+- crossterm 可選化：feature gate + `required-features` on vi/vim
+- `test.sh` riscv64 build 使用 `--no-default-features`
+- 全測試通過：cargo tests 214/214、shell 33/33、core tools 21/21
+
 ## 當前狀態
 
 | 類別 | 數量 |
@@ -96,6 +106,8 @@ build-std = ["core", "compiler_builtins", "alloc"]
 | 編譯成功 | 135 |
 | libc 依賴失敗 | 0 |
 | 全鏈路驗證 | 通過 |
+| vi/vim host 可用 | 是 |
+| riscv64 crossterm | 未驗證（xv8-user-std 不支援完整 std） |
 
 ## 限制
 
