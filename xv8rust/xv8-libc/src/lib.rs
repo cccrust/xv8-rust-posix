@@ -11,6 +11,11 @@ pub use raw::{
     tcp_socket, tcp_bind, tcp_listen, tcp_accept, tcp_connect, tcp_send, tcp_recv,
 };
 pub use raw::{sleep, uptime, time, nanosleep, clock_gettime, clock_getres, clock_settime};
+pub use raw::{fcntl, poll, epoll_create1, epoll_ctl, epoll_wait, PollFd, EpollEvent,
+    POLLIN, POLLOUT, POLLERR, POLLHUP,
+    EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLRDHUP,
+    EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
+    F_GETFL, F_SETFL, O_NONBLOCK, EAGAIN};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fd(usize);

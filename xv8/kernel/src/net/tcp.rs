@@ -153,7 +153,7 @@ pub struct TcpTable {
 
 const EPHEMERAL_PORT_START: u16 = 32768;
 
-pub(crate) static TCP_TABLE: SpinLock<TcpTable> = SpinLock::new(
+pub static TCP_TABLE: SpinLock<TcpTable> = SpinLock::new(
     TcpTable {
         entries: [const { None }; NTCP],
         next_ephemeral: EPHEMERAL_PORT_START,

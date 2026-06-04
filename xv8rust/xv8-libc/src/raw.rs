@@ -63,6 +63,11 @@ pub enum Syscall {
     TcpConnect = 112,
     TcpSend = 113,
     TcpRecv = 114,
+    Fcntl = 115,
+    Poll = 116,
+    EpollCreate1 = 117,
+    EpollCtl = 118,
+    EpollWait = 119,
 }
 
 #[inline(always)]
@@ -102,6 +107,22 @@ fn syscall3(syscall: Syscall, a0: usize, a1: usize, a2: usize) -> isize {
             inlateout("a0") a0 as isize => ret,
             in("a1") a1,
             in("a2") a2,
+        );
+    }
+    ret
+}
+
+#[inline(always)]
+fn syscall4(syscall: Syscall, a0: usize, a1: usize, a2: usize, a3: usize) -> isize {
+    let ret: isize;
+    unsafe {
+        core::arch::asm!(
+            "ecall",
+            in("a7") syscall as usize,
+            inlateout("a0") a0 as isize => ret,
+            in("a1") a1,
+            in("a2") a2,
+            in("a3") a3,
         );
     }
     ret
@@ -383,3 +404,59 @@ pub struct Stat {
     pub atime: u32,
     pub mtime: u32,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct PollFd {
+    pub fd: i32,
+    pub events: i16,
+    pub revents: i16,
+}
+
+#[repr(C, packed)]
+#[derive(Clone, Copy)]
+pub struct EpollEvent {
+    pub events: u32,
+    pub data: u64,
+}
+
+pub const POLLIN: i16 = 0x001;
+pub const POLLOUT: i16 = 0x004;
+pub const POLLERR: i16 = 0x008;
+pub const POLLHUP: i16 = 0x010;
+
+pub const EPOLLIN: u32 = 0x001;
+pub const EPOLLOUT: u32 = 0x004;
+pub const EPOLLERR: u32 = 0x008;
+pub const EPOLLHUP: u32 = 0x010;
+pub const EPOLLRDHUP: u32 = 0x2000;
+
+pub const EPOLL_CTL_ADD: usize = 1;
+pub const EPOLL_CTL_DEL: usize = 2;
+pub const EPOLL_CTL_MOD: usize = 3;
+
+pub fn fcntl(fd: usize, cmd: usize, arg: usize) -> isize {
+    syscall3(Syscall::Fcntl, fd, cmd, arg)
+}
+
+pub fn poll(fds: *mut PollFd, nfds: usize, timeout: isize) -> isize {
+    syscall3(Syscall::Poll, fds as usize, nfds, timeout as usize)
+}
+
+pub fn epoll_create1(flags: usize) -> isize {
+    syscall1(Syscall::EpollCreate1, flags)
+}
+
+pub fn epoll_ctl(epfd: usize, op: usize, fd: usize, event: *const EpollEvent) -> isize {
+    syscall4(Syscall::EpollCtl, epfd, op, fd, event as usize)
+}
+
+pub fn epoll_wait(epfd: usize, events: *mut EpollEvent, max_events: usize, timeout: isize) -> isize {
+    syscall4(Syscall::EpollWait, epfd, events as usize, max_events, timeout as usize)
+}
+
+pub const F_GETFL: usize = 3;
+pub const F_SETFL: usize = 4;
+pub const O_NONBLOCK: usize = 0x800;
+
+pub const EAGAIN: u16 = 11;

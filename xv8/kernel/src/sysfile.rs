@@ -973,7 +973,14 @@ pub fn sys_fcntl(args: &SyscallArgs) -> Result<usize, SysError> {
             Ok(flags)
         }
         F_SETFL => {
-            inner.nonblocking = (arg & OpenFlag::NON_BLOCK) != 0;
+            let nb = (arg & OpenFlag::NON_BLOCK) != 0;
+            inner.nonblocking = nb;
+            if let crate::file::FileType::TcpSocket { tcp_id } = inner.r#type {
+                let mut tcp_table = crate::net::tcp::TCP_TABLE.lock();
+                if let Some(ref mut conn) = tcp_table.entries[tcp_id] {
+                    conn.nonblocking = nb;
+                }
+            }
             Ok(0)
         }
         _ => err!(SysError::InvalidArgument),

@@ -11,8 +11,10 @@ use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use xv8_user_std::sync::{Mutex, MutexGuard};
-use xv8_user_std::thread;
 use xv8_user_std::time::{Duration, Instant};
+
+pub mod reactor;
+pub mod io_async;
 
 struct ExecutorInner {
     queue: Mutex<VecDeque<Arc<Task>>>,
@@ -240,7 +242,7 @@ impl Runtime {
                 return value;
             }
 
-            self.sleep_until_next_timer();
+            self.reactor_tick();
         }
     }
 
@@ -250,19 +252,18 @@ impl Runtime {
         }
     }
 
-    fn sleep_until_next_timer(&self) {
+    fn reactor_tick(&self) {
         let deadline = self.inner.next_deadline();
-        if let Some(deadline) = deadline {
+        let timeout = deadline.map(|d| {
             let now = Instant::now();
-            if deadline > now {
-                thread::sleep(deadline - now);
-            } else {
-                thread::yield_now();
-            }
-            self.inner.wake_expired(Instant::now());
-        } else {
-            thread::yield_now();
-        }
+            if d > now {
+                let millis = (d - now).as_millis();
+                if millis > isize::MAX as u64 { -1 } else { millis as isize }
+            } else { 0 }
+        }).unwrap_or(-1);
+
+        reactor::poll_events(timeout);
+        self.inner.wake_expired(Instant::now());
     }
 }
 

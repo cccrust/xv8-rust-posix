@@ -60,10 +60,10 @@ pub fn sys_tcp_listen(args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_tcp_accept(args: &SyscallArgs) -> Result<usize, SysError> {
     let (_, file) = try_log!(args.get_file(0));
 
-    let tcp_id = {
+    let (tcp_id, listener_nonblocking) = {
         let inner = FILE_TABLE.inner[file.id].lock();
         let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
-        tcp_id
+        (tcp_id, inner.nonblocking)
     };
 
     let child_id = try_log!(TcpTable::accept(tcp_id).map_err(SysError::from));
@@ -84,6 +84,13 @@ pub fn sys_tcp_accept(args: &SyscallArgs) -> Result<usize, SysError> {
 
     let mut inner = FILE_TABLE.inner[new_file.id].lock();
     inner.r#type = FileType::TcpSocket { tcp_id: child_id };
+    inner.nonblocking = listener_nonblocking;
+    if listener_nonblocking {
+        let mut tcp_table = crate::net::tcp::TCP_TABLE.lock();
+        if let Some(ref mut child) = tcp_table.entries[child_id] {
+            child.nonblocking = true;
+        }
+    }
 
     Ok(fd)
 }
@@ -96,6 +103,12 @@ pub fn sys_tcp_connect(args: &SyscallArgs) -> Result<usize, SysError> {
     let tcp_id = {
         let inner = FILE_TABLE.inner[file.id].lock();
         let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
+        // propagate nonblocking flag to TcpConnection
+        let mut tcp_table = crate::net::tcp::TCP_TABLE.lock();
+        if let Some(ref mut conn) = tcp_table.entries[tcp_id] {
+            conn.nonblocking = inner.nonblocking;
+        }
+        drop(tcp_table);
         tcp_id
     };
 
