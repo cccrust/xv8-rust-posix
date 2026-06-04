@@ -13,6 +13,7 @@ crossterm = { package = "crossterm", path = "../../xv8rust/crossterm", optional 
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 std = { package = "xv8-user-std", path = "../../xv8rust/xv8-user-std" }
+xv8-async = { path = "../../xv8rust/xv8-async" }
 
 [[bin]]
 name = "echo"
@@ -603,6 +604,16 @@ path = "src/bin/fc.rs"
 [[bin]]
 name = "test_dir"
 path = "src/bin/test_dir.rs"
+
+# ─── Async test tools ────────────────────────────────────────────────────
+
+[[bin]]
+name = "async_echo"
+path = "src/bin/async_echo.rs"
+
+[[bin]]
+name = "axum_smoke"
+path = "src/bin/axum_smoke.rs"
 
 # ─── v2.0: User / Login Tools ─────────────────────────────────────────────
 
