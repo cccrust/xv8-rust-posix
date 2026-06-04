@@ -74,6 +74,13 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 - Step 2 ✅：`net/libnet` platform abstraction + `net/tools` riscv64 build
 - Step 3 ✅：xv8 QEMU 整合測試（12/12 passed），root `test.sh` 全專案合併測試（9/9 passed）
 
+## v2.3 — HTTP 支援（xv8 QEMU 內 httpd + httpget）✅
+
+**已於 `_doc/v2.3.md` 記錄。**
+- `httpget` + `httpd` 雙工具，host + riscv64 雙目標編譯
+- xv8 QEMU `_http` 測試通過（13/13）
+- 不使用第三方 HTTP crate，純 `libnet::TcpStream` 實作
+
 ## 版本對照
 
 | 版本 | 主要內容 | 依賴 |
@@ -87,3 +94,4 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 | v2.0 | users/who 強化 + rev/col/look/last | 無 |
 | v2.1 | xv8 核心網路（TCP、HTTP、TLS）✅ | v2.0 |
 | v2.2 | xv8rust/net bridge + 網路工具移植 ✅ | v2.1 |
+| v2.3 | HTTP 支援（httpd + httpget）✅ | v2.2 |

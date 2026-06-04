@@ -53,7 +53,7 @@
 |------|---------|------|
 | v2.1 | xv8 核心 TCP + TCP echo 測試 ✅ | v2.0 (核心穩定性) |
 | v2.2 | xv8rust/net bridge + net/ 工具移植 ✅ | v2.1 (核心 TCP) |
-| v2.3 | HTTP/TLS 支援、curl/http_server 在 xv8 執行 ⬜ | v2.2 |
+| v2.3 | HTTP 支援（httpd + httpget）✅ | v2.2 |
 
 ## v2.4 — xv8rust async runtime + axum smoke test
 

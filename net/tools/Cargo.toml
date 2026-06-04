@@ -72,6 +72,16 @@ name = "ssh_client"
 path = "src/bin/ssh_client.rs"
 required-features = ["default"]
 
+[[bin]]
+name = "httpget"
+path = "src/bin/httpget.rs"
+required-features = []
+
+[[bin]]
+name = "httpd"
+path = "src/bin/httpd.rs"
+required-features = []
+
 [dependencies]
 libnet = { path = "../libnet" }
 fastrand = { version = "2", optional = true }
