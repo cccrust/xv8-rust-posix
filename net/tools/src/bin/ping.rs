@@ -1,7 +1,7 @@
 use libnet::icmp;
 use libnet::util;
-use std::net::Ipv4Addr;
-use std::time::Duration;
+use libnet::net_impl::Ipv4Addr;
+use libnet::net_impl::Duration;
 
 fn usage() -> ! {
     eprintln!("Usage: ping <ip>");

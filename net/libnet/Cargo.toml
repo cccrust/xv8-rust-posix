@@ -3,8 +3,13 @@ name = "libnet"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+xv8 = ["dep:xv8-net", "dep:xv8-user-std"]
+
 [dependencies]
-fastrand = "2"
+xv8-net = { path = "../../xv8rust/xv8-net", optional = true }
+xv8-user-std = { path = "../../xv8rust/xv8-user-std", optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 libc = "0.2"

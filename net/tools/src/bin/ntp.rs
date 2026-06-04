@@ -1,5 +1,5 @@
 use libnet::ntp;
-use std::time::UNIX_EPOCH;
+use libnet::net_impl::UNIX_EPOCH;
 
 fn format_utc(secs: u64, nsecs: u32) -> String {
     let days = secs / 86400;

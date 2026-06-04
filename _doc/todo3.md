@@ -22,12 +22,18 @@
 
 ## v2.2 — xv8rust/net bridge + 網路工具移植
 
-### 步驟 1：xv8rust 網路層
+### 步驟 1：xv8rust 網路層 ✅
 - `xv8rust/xv8-net/` — 最小 `std::net` 相容層
-  - `TcpStream`（connect、read、write）
-  - `UdpSocket`（bind、send_to、recv_from）
-  - `lookup_host`（DNS 查詢）
+  - `TcpStream`（connect、read、write、set_read_timeout、shutdown、try_clone）
+  - `TcpListener`（bind、accept、incoming、local_addr）
+  - `UdpSocket`（bind、send_to、recv_from、set_read_timeout）
+  - `Ipv4Addr` / `IpAddr` / `SocketAddr` / `SocketAddrV4`
+  - `ToSocketAddrs`（支援 &str、String、(IpAddr,u16)、(&str,u16)、u16 等）
+  - `lookup_host`（直接 IP 解析；DNS 整合待後續）
+  - 外部依賴：`xv8-user-std`（內部委派至其 net/io/types），`xv8-libc`
 - 僅提供 `net/` 工具所需的 API，不完整實作整個 `std::net`
+- **檔案**：`xv8rust/xv8-net/Cargo.toml`, `src/lib.rs`, `src/net.rs`（492 行）
+- **編譯**：host + riscv64gc-unknown-none-elf 皆通過，零警告
 
 ### 步驟 2：net/ 工具 riscv64 編譯
 - `net/libnet` 新增 `cfg` 切換：host 用 `std::net`，xv8 用 `xv8rust::net` shim

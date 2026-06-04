@@ -1,6 +1,4 @@
-use std::io::{Read, Write};
-use std::net::TcpStream;
-use std::time::Duration;
+use libnet::net_impl::{Read, Write, TcpStream, Duration};
 
 fn usage() -> ! {
     eprintln!("Usage: tcpclient <host> <port> [data]");

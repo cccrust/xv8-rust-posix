@@ -1,5 +1,11 @@
-use std::net::UdpSocket;
-use std::time::Duration;
+#[cfg(feature = "xv8")]
+use alloc::format;
+#[cfg(feature = "xv8")]
+use alloc::string::{String, ToString};
+#[cfg(feature = "xv8")]
+use alloc::vec::Vec;
+
+use crate::net_impl::{UdpSocket, Duration};
 
 const OP_RRQ: u16 = 1;
 #[allow(dead_code)]

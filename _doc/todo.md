@@ -67,9 +67,10 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 
 ---
 
-## v2.2 — 網路工具整合（curl、ssh、https）
+## v2.2 — xv8rust/net bridge + 網路工具移植
 
-**規劃中，見 `_doc/todo2.md`。**
+**進行中，見 `_doc/todo3.md`。**
+- Step 1 ✅：`xv8rust/xv8-net/` 最小 `std::net` 相容層（host + riscv64 雙目標編譯通過）
 
 ## 版本對照
 
@@ -82,5 +83,5 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 | v1.7 | ex, fc | v1.3 (shell 依賴) |
 | v1.8 | iconv 編碼擴充 | 無 |
 | v2.0 | users/who 強化 + rev/col/look/last | 無 |
-| v2.1 | xv8 核心網路（TCP、HTTP、TLS） | v2.0 |
-| v2.2 | 網路工具整合（curl、ssh、https） | v2.1 |
+| v2.1 | xv8 核心網路（TCP、HTTP、TLS）✅ | v2.0 |
+| v2.2 | xv8rust/net bridge + 網路工具移植 ⬜ | v2.1 |

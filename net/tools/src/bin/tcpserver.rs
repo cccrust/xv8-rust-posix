@@ -1,7 +1,7 @@
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use libnet::net_impl::{Read, Write, TcpListener, TcpStream, SystemTime, UNIX_EPOCH};
+
+#[cfg(not(feature = "xv8"))]
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 enum Mode {
     Echo,
@@ -142,9 +142,12 @@ fn main() {
                     Mode::Daytime => Mode::Daytime,
                     Mode::Time => Mode::Time,
                 };
+                #[cfg(not(feature = "xv8"))]
                 thread::spawn(move || {
                     handle_client(stream, mode_clone);
                 });
+                #[cfg(feature = "xv8")]
+                handle_client(stream, mode_clone);
             }
             Err(e) => {
                 eprintln!("accept error: {}", e);

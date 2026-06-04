@@ -1,0 +1,8 @@
+[package]
+name = "xv8-net"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+xv8-user-std = { path = "../xv8-user-std" }
+xv8-libc = { path = "../xv8-libc" }

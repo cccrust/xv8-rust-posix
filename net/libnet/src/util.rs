@@ -1,3 +1,10 @@
+#[cfg(feature = "xv8")]
+use alloc::{format, vec};
+#[cfg(feature = "xv8")]
+use alloc::string::String;
+#[cfg(feature = "xv8")]
+use alloc::vec::Vec;
+
 pub fn ip_to_string(ip: &[u8; 4]) -> String {
     format!("{}.{}.{}.{}", ip[0], ip[1], ip[2], ip[3])
 }

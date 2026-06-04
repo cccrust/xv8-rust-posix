@@ -652,6 +652,14 @@ name = "xv8-libc"
 version = "0.1.0"
 
 [[package]]
+name = "xv8-net"
+version = "0.1.0"
+dependencies = [
+ "xv8-libc",
+ "xv8-user-std",
+]
+
+[[package]]
 name = "xv8-user-std"
 version = "0.1.0"
 dependencies = [

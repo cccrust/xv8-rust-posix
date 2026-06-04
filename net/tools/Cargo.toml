@@ -3,64 +3,84 @@ name = "tools"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = ["tiny_http", "ureq", "ssh2", "tokio", "hyper", "rand", "fastrand"]
+xv8 = ["libnet/xv8"]
+
 [[bin]]
 name = "ping"
 path = "src/bin/ping.rs"
+required-features = ["default"]
 
 [[bin]]
 name = "host"
 path = "src/bin/host.rs"
+required-features = []
 
 [[bin]]
 name = "dns"
 path = "src/bin/dns.rs"
+required-features = []
 
 [[bin]]
 name = "tcpclient"
 path = "src/bin/tcpclient.rs"
+required-features = []
 
 [[bin]]
 name = "tcpserver"
 path = "src/bin/tcpserver.rs"
+required-features = []
 
 [[bin]]
 name = "tftp"
 path = "src/bin/tftp.rs"
+required-features = []
 
 [[bin]]
 name = "ntp"
 path = "src/bin/ntp.rs"
+required-features = []
 
 [[bin]]
 name = "whois"
 path = "src/bin/whois.rs"
+required-features = []
 
 [[bin]]
 name = "traceroute"
 path = "src/bin/traceroute.rs"
+required-features = ["default"]
 
 [[bin]]
 name = "netstat"
 path = "src/bin/netstat.rs"
+required-features = ["default"]
 
 [[bin]]
 name = "http_server"
 path = "src/bin/http_server.rs"
+required-features = ["default"]
 
 [[bin]]
 name = "curl"
 path = "src/bin/curl.rs"
+required-features = ["default"]
 
 [[bin]]
 name = "ssh_client"
 path = "src/bin/ssh_client.rs"
+required-features = ["default"]
 
 [dependencies]
 libnet = { path = "../libnet" }
-fastrand = "2"
-tiny_http = "0.12"
-ureq = "2.12.1"
-ssh2 = { version = "0.9", features = ["vendored-openssl"] }
-tokio = { version = "1", features = ["full"] }
-hyper = { version = "0.14", features = ["full"] }
-rand = "0.8"
+fastrand = { version = "2", optional = true }
+tiny_http = { version = "0.12", optional = true }
+ureq = { version = "2.12.1", optional = true }
+ssh2 = { version = "0.9", features = ["vendored-openssl"], optional = true }
+tokio = { version = "1", features = ["full"], optional = true }
+hyper = { version = "0.14", features = ["full"], optional = true }
+rand = { version = "0.8", optional = true }
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+std = { package = "xv8-user-std", path = "../../xv8rust/xv8-user-std" }

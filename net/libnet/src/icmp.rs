@@ -1,6 +1,6 @@
+use crate::net_impl::{Ipv4Addr, Duration};
 use crate::util::internet_checksum;
-use std::net::Ipv4Addr;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 pub const ICMP_ECHO_REQUEST: u8 = 8;
 pub const ICMP_ECHO_REPLY: u8 = 0;

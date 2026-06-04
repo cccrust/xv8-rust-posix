@@ -1,3 +1,10 @@
+#[cfg(feature = "xv8")]
+use alloc::format;
+#[cfg(feature = "xv8")]
+use alloc::string::{String, ToString};
+#[cfg(feature = "xv8")]
+use alloc::vec::Vec;
+
 use crate::util::encode_dns_name;
 
 pub const TYPE_A: u16 = 1;
@@ -125,7 +132,7 @@ fn decode_dns_name(data: &[u8], offset: &mut usize) -> Option<String> {
         if *offset + len > data.len() {
             return None;
         }
-        let label = std::str::from_utf8(&data[*offset..*offset + len]).ok()?;
+        let label = core::str::from_utf8(&data[*offset..*offset + len]).ok()?;
         labels.push(label);
         *offset += len;
     }
@@ -207,14 +214,14 @@ pub fn parse_response(data: &[u8]) -> Option<(DnsHeader, Vec<DnsRecord>)> {
 
 /// Sends a DNS query over UDP and returns the (header, records) response.
 pub fn query(server: &str, domain: &str, qtype: u16) -> Result<(DnsHeader, Vec<DnsRecord>), String> {
-    use std::net::UdpSocket;
+    use crate::net_impl::{UdpSocket, Duration};
 
     let sock = UdpSocket::bind("0.0.0.0:0")
         .map_err(|e| format!("bind: {}", e))?;
-    sock.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+    sock.set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|e| format!("set timeout: {}", e))?;
 
-    let id = fastrand::u16(..);
+    let id = crate::random_u16();
     let query = build_query(domain, qtype, id);
     sock.send_to(&query, format!("{}:{}", server, 53))
         .map_err(|e| format!("send: {}", e))?;

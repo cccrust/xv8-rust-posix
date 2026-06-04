@@ -1,5 +1,11 @@
-use std::net::UdpSocket;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(feature = "xv8")]
+use alloc::{format, vec};
+#[cfg(feature = "xv8")]
+use alloc::string::{String, ToString};
+#[cfg(feature = "xv8")]
+use alloc::vec::Vec;
+
+use crate::net_impl::{UdpSocket, Duration, SystemTime, UNIX_EPOCH};
 
 /// NTP timestamp (seconds since 1900-01-01, 32-bit integer part + 32-bit fractional)
 #[derive(Debug, Clone, Copy)]
