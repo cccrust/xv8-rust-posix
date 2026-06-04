@@ -399,6 +399,139 @@ impl Write for Stderr {
     fn flush(&mut self) -> Result<()> { Ok(()) }
 }
 
+pub struct Cursor<T> {
+    inner: T,
+    pos: u64,
+}
+
+impl<T> Cursor<T> {
+    pub fn new(inner: T) -> Self { Self { inner, pos: 0 } }
+    pub fn into_inner(self) -> T { self.inner }
+    pub fn get_ref(&self) -> &T { &self.inner }
+    pub fn get_mut(&mut self) -> &mut T { &mut self.inner }
+    pub fn position(&self) -> u64 { self.pos }
+    pub fn set_position(&mut self, pos: u64) { self.pos = pos; }
+}
+
+impl Cursor<Vec<u8>> {
+    pub fn write_all_from_slice(&mut self, buf: &[u8]) -> Result<()> {
+        let pos = self.pos as usize;
+        let end = pos + buf.len();
+        if end > self.inner.len() {
+            self.inner.resize(end, 0);
+        }
+        self.inner[pos..end].copy_from_slice(buf);
+        self.pos = end as u64;
+        Ok(())
+    }
+}
+
+impl Read for Cursor<Vec<u8>> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let pos = self.pos as usize;
+        if pos >= self.inner.len() { return Ok(0); }
+        let len = core::cmp::min(buf.len(), self.inner.len() - pos);
+        buf[..len].copy_from_slice(&self.inner[pos..pos + len]);
+        self.pos += len as u64;
+        Ok(len)
+    }
+}
+
+impl Write for Cursor<Vec<u8>> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let pos = self.pos as usize;
+        let end = pos + buf.len();
+        if end > self.inner.len() {
+            self.inner.resize(end, 0);
+        }
+        self.inner[pos..end].copy_from_slice(buf);
+        self.pos = end as u64;
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> Result<()> { Ok(()) }
+}
+
+impl Seek for Cursor<Vec<u8>> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        let new_pos = match pos {
+            SeekFrom::Start(off) => off as i64,
+            SeekFrom::End(off) => self.inner.len() as i64 + off,
+            SeekFrom::Current(off) => self.pos as i64 + off,
+        };
+        if new_pos < 0 { return Err(ErrorKind::InvalidInput.into()); }
+        self.pos = new_pos as u64;
+        Ok(self.pos)
+    }
+}
+
+impl Read for Cursor<&[u8]> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let pos = self.pos as usize;
+        if pos >= self.inner.len() { return Ok(0); }
+        let len = core::cmp::min(buf.len(), self.inner.len() - pos);
+        buf[..len].copy_from_slice(&self.inner[pos..pos + len]);
+        self.pos += len as u64;
+        Ok(len)
+    }
+}
+
+impl Seek for Cursor<&[u8]> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        let new_pos = match pos {
+            SeekFrom::Start(off) => off as i64,
+            SeekFrom::End(off) => self.inner.len() as i64 + off,
+            SeekFrom::Current(off) => self.pos as i64 + off,
+        };
+        if new_pos < 0 { return Err(ErrorKind::InvalidInput.into()); }
+        self.pos = new_pos as u64;
+        Ok(self.pos)
+    }
+}
+
+pub struct BufWriter<W: Write> {
+    inner: W,
+    buf: Vec<u8>,
+}
+
+impl<W: Write> BufWriter<W> {
+    pub fn new(inner: W) -> Self { Self { inner, buf: Vec::with_capacity(8192) } }
+    pub fn with_capacity(capacity: usize, inner: W) -> Self { Self { inner, buf: Vec::with_capacity(capacity) } }
+    pub fn into_inner(self) -> Result<W> {
+        let mut w = self.inner;
+        // Flush remaining buffer before returning
+        if !self.buf.is_empty() {
+            w.write_all(&self.buf)?;
+        }
+        Ok(w)
+    }
+    pub fn get_ref(&self) -> &W { &self.inner }
+    pub fn get_mut(&mut self) -> &mut W { &mut self.inner }
+    pub fn buffer(&self) -> &[u8] { &self.buf }
+}
+
+impl<W: Write> Write for BufWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        // If the incoming data is larger than the buffer, flush first and write directly
+        if buf.len() > self.buf.capacity() {
+            self.flush()?;
+            self.inner.write(buf)
+        } else {
+            self.buf.extend_from_slice(buf);
+            if self.buf.len() >= self.buf.capacity() {
+                self.flush()?;
+            }
+            Ok(buf.len())
+        }
+    }
+    fn flush(&mut self) -> Result<()> {
+        if !self.buf.is_empty() {
+            self.inner.write_all(&self.buf)?;
+            self.buf.clear();
+        }
+        self.inner.flush()
+    }
+}
+
 pub struct BufReader<R> {
     inner: R,
     buf: [u8; 8192],
@@ -513,6 +646,18 @@ impl<T: Read> Read for Take<T> {
         self.limit -= n as u64;
         Ok(n)
     }
+}
+
+pub fn copy<R: Read + ?Sized, W: Write + ?Sized>(reader: &mut R, writer: &mut W) -> Result<u64> {
+    let mut buf = [0u8; 8192];
+    let mut total = 0;
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 { break; }
+        writer.write_all(&buf[..n])?;
+        total += n as u64;
+    }
+    Ok(total)
 }
 
 pub fn stdin() -> Stdin { Stdin }

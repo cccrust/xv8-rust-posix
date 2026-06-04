@@ -79,6 +79,28 @@ pub fn set_var(key: &str, value: &str) {
     }
 }
 
+pub mod consts {
+    pub const ARCH: &str = "riscv64";
+    pub const FAMILY: &str = "unix";
+    pub const OS: &str = "xv8";
+    pub const EXE_SUFFIX: &str = "";
+    pub const EXE_EXTENSION: &str = "";
+    pub const HOME_ENV: &str = "HOME";
+    pub const PATH_SEPARATOR: char = ':';
+    pub const PATH_SEPARATOR_STR: &str = ":";
+}
+
+pub fn temp_dir() -> super::path::PathBuf {
+    super::path::PathBuf::from(b"/tmp")
+}
+
+pub fn home_dir() -> Option<super::path::PathBuf> {
+    match var("HOME") {
+        Ok(s) if !s.is_empty() => Some(super::path::PathBuf::from(s.as_bytes())),
+        _ => None,
+    }
+}
+
 pub fn remove_var(key: &str) {
     if let Ok(c_key) = CString::new(key) {
         let _ = xv8_libc::unsetenv(c_key.as_ptr() as *const u8);

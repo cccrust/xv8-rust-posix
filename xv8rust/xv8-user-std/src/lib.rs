@@ -142,6 +142,26 @@ pub mod convert {
 
 pub mod sync;
 
+pub mod panic {
+    use alloc::boxed::Box;
+    use core::any::Any;
+
+    pub trait UnwindSafe {}
+    pub trait RefUnwindSafe {}
+
+    pub struct AssertUnwindSafe<F>(pub F);
+
+    impl<F> UnwindSafe for AssertUnwindSafe<F> {}
+
+    pub fn catch_unwind<F: FnOnce() -> R, R>(f: F) -> Result<R, Box<dyn Any>> {
+        Ok(f())
+    }
+
+    pub fn resume_unwind(_payload: Box<dyn Any>) -> ! {
+        loop {}
+    }
+}
+
 pub mod prelude {
     pub mod rust_2021 {
         pub use core::prelude::rust_2021::*;

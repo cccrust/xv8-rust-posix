@@ -1,4 +1,5 @@
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::mem::size_of;
 use crate::io::Read;
 use crate::ffi::CString;
@@ -403,4 +404,57 @@ pub fn read_dir<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<ReadD
     let path_str = path.as_ref().to_str().unwrap_or("").to_string();
     let file = File::open(path.as_ref())?;
     Ok(ReadDir { file, _path: path_str, _offset: 0 })
+}
+
+pub fn remove_dir_all<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<()> {
+    if remove_file(path.as_ref()).is_ok() { return Ok(()); }
+    let entries: Vec<super::path::PathBuf> = read_dir(path.as_ref())?
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let name = e.file_name().to_str().unwrap_or("");
+            name != "." && name != ".."
+        })
+        .map(|e| e.path())
+        .collect();
+    for entry in entries {
+        remove_dir_all(&entry)?;
+    }
+    remove_dir(path.as_ref())
+}
+
+pub fn canonicalize<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<super::path::PathBuf> {
+    let path_str = path.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    // Use getcwd + path resolution
+    let cwd = crate::env::current_dir()?;
+    let combined = if path.as_ref().is_absolute() {
+        path_str.to_string()
+    } else {
+        let mut base = cwd.as_os_str().to_str().unwrap_or("/").to_string();
+        if base != "/" { base.push('/'); }
+        base.push_str(path_str);
+        base
+    };
+
+    // Normalize: split, resolve . and ..
+    let mut parts: Vec<&str> = Vec::new();
+    for component in combined.split('/') {
+        if component.is_empty() || component == "." { continue; }
+        if component == ".." {
+            parts.pop();
+        } else {
+            parts.push(component);
+        }
+    }
+
+    let mut result = super::path::PathBuf::new();
+    if combined.starts_with('/') {
+        result.push(super::path::Path::new("/"));
+    }
+    for part in parts {
+        result.push(super::path::Path::new(part));
+    }
+    if result.as_os_str().to_str().unwrap_or("").is_empty() {
+        result.push(super::path::Path::new("/"));
+    }
+    Ok(result)
 }

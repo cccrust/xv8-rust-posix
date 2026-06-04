@@ -1,6 +1,6 @@
 use alloc::string::ToString;
 use alloc::vec::Vec;
-use crate::ffi::CString;
+use crate::ffi::{CString, OsStr};
 
 pub struct Path { inner: [u8] }
 
@@ -28,13 +28,27 @@ impl Path {
         let s = self.to_str()?;
         s.rfind('/').map(|i| Path::new(&s[..i]))
     }
-    pub fn is_absolute(&self) -> bool { false }
-    pub fn is_relative(&self) -> bool { true }
+    pub fn is_absolute(&self) -> bool {
+        self.inner.first() == Some(&b'/')
+    }
+    pub fn is_relative(&self) -> bool { !self.is_absolute() }
     pub fn is_dir(&self) -> bool { self.exists() && self.metadata().map(|m| m.is_dir()).unwrap_or(false) }
     pub fn is_file(&self) -> bool { self.exists() && self.metadata().map(|m| m.is_file()).unwrap_or(false) }
-    pub fn as_os_str(&self) -> &str { self.to_str().unwrap_or("") }
-    pub fn ends_with(&self, _other: &Path) -> bool { false }
-    pub fn starts_with(&self, _other: &Path) -> bool { false }
+    pub fn as_os_str(&self) -> &OsStr {
+        OsStr::from_str(core::str::from_utf8(&self.inner).unwrap_or(""))
+    }
+    pub fn ends_with(&self, other: &Path) -> bool {
+        let s = match self.to_str() { Some(s) => s, None => return false };
+        let o = match other.to_str() { Some(o) => o, None => return false };
+        s.ends_with(o)
+    }
+    pub fn starts_with(&self, other: &Path) -> bool {
+        let s = match self.to_str() { Some(s) => s, None => return false };
+        let o = match other.to_str() { Some(o) => o, None => return false };
+        if s == o { return true; }
+        if o.is_empty() { return true; }
+        s.starts_with(o) && (o.ends_with('/') || s.len() == o.len() || s.as_bytes().get(o.len()) == Some(&b'/'))
+    }
     pub fn join<P: AsRef<Path>>(&self, other: P) -> PathBuf {
         let other = other.as_ref();
         if other.is_absolute() {
@@ -45,7 +59,7 @@ impl Path {
         if !inner.is_empty() && !inner.ends_with(&[b'/']) {
             inner.push(b'/');
         }
-        inner.extend_from_slice(other.as_os_str().as_bytes());
+        inner.extend_from_slice(other.as_os_str().as_encoded_bytes());
         PathBuf { inner }
     }
     pub fn metadata(&self) -> super::io::Result<super::fs::Metadata> {
@@ -106,14 +120,67 @@ pub struct PathBuf { inner: Vec<u8> }
 impl PathBuf {
     pub fn new() -> Self { PathBuf { inner: Vec::new() } }
     pub fn from<S: AsRef<[u8]>>(s: S) -> Self { PathBuf { inner: s.as_ref().to_vec() } }
-    pub fn push(&mut self, _path: &Path) {}
+    pub fn push(&mut self, path: &Path) {
+        if path.is_absolute() {
+            self.inner = path.inner.as_ref().to_vec();
+            return;
+        }
+        if !self.inner.is_empty() && self.inner.last() != Some(&b'/') {
+            self.inner.push(b'/');
+        }
+        self.inner.extend_from_slice(&path.inner);
+    }
     pub fn as_path(&self) -> &Path { Path::new(&self.inner) }
-    pub fn pop(&mut self) -> bool { false }
-    pub fn set_file_name(&mut self, _name: &str) {}
-    pub fn with_extension(&self, _ext: &str) -> Self { self.clone() }
+    pub fn pop(&mut self) -> bool {
+        let s = match core::str::from_utf8(&self.inner) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        if s.is_empty() || s == "/" { return false; }
+        let trimmed = s.trim_end_matches('/');
+        if trimmed.is_empty() { // path was all slashes
+            self.inner.truncate(1); // keep root
+            return true;
+        }
+        match trimmed.rfind('/') {
+            Some(pos) => {
+                self.inner.truncate(pos + 1); // keep trailing /
+                true
+            }
+            None => {
+                self.inner.clear();
+                true
+            }
+        }
+    }
+    pub fn set_file_name(&mut self, name: &str) {
+        self.pop();
+        if !name.is_empty() {
+            if !self.inner.is_empty() && self.inner.last() != Some(&b'/') {
+                self.inner.push(b'/');
+            }
+            self.inner.extend_from_slice(name.as_bytes());
+        }
+    }
+    pub fn with_extension(&self, ext: &str) -> Self {
+        let s = match self.to_str() {
+            Some(s) => s,
+            None => return self.clone(),
+        };
+        let dot = s.rfind('.');
+        let base = match dot {
+            Some(pos) if pos > s.rfind('/').map(|p| p + 1).unwrap_or(0) => &s[..pos],
+            _ => s.trim_end_matches('/'),
+        };
+        if ext.is_empty() {
+            PathBuf::from(base)
+        } else {
+            PathBuf::from(alloc::format!("{}.{}", base, ext))
+        }
+    }
     pub fn to_str(&self) -> Option<&str> { self.as_path().to_str() }
     pub fn to_string_lossy(&self) -> alloc::string::String { self.as_path().to_string_lossy() }
-    pub fn as_os_str(&self) -> &str { self.as_path().as_os_str() }
+    pub fn as_os_str(&self) -> &OsStr { self.as_path().as_os_str() }
     pub fn exists(&self) -> bool { self.as_path().exists() }
     pub fn is_dir(&self) -> bool { self.as_path().is_dir() }
     pub fn is_file(&self) -> bool { self.as_path().is_file() }

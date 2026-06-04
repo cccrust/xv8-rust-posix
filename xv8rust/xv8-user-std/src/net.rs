@@ -1,10 +1,269 @@
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
 use core::str::FromStr;
 
 use crate::io::{self, ErrorKind, Read, Write};
 use crate::os::unix::io::{AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd};
 use xv8_libc;
+
+// ─── IP address types ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AddrParseError(());
+
+impl fmt::Display for AddrParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "invalid address")
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Ipv4Addr {
+    octets: [u8; 4],
+}
+
+impl Ipv4Addr {
+    pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
+        Self { octets: [a, b, c, d] }
+    }
+
+    pub const UNSPECIFIED: Self = Self { octets: [0, 0, 0, 0] };
+    pub const LOOPBACK: Self = Self { octets: [127, 0, 0, 1] };
+    pub const BROADCAST: Self = Self { octets: [255, 255, 255, 255] };
+
+    pub fn octets(&self) -> [u8; 4] { self.octets }
+    pub fn is_loopback(&self) -> bool { self.octets[0] == 127 }
+    pub fn is_private(&self) -> bool {
+        self.octets[0] == 10
+            || (self.octets[0] == 172 && (16..=31).contains(&self.octets[1]))
+            || (self.octets[0] == 192 && self.octets[1] == 168)
+    }
+    pub fn is_unspecified(&self) -> bool { self.octets == [0, 0, 0, 0] }
+    pub fn is_broadcast(&self) -> bool { self.octets == [255, 255, 255, 255] }
+    pub fn is_link_local(&self) -> bool { self.octets[0] == 169 && self.octets[1] == 254 }
+    pub fn is_multicast(&self) -> bool { self.octets[0] & 0xF0 == 224 }
+    pub fn to_ipv6_compatible(&self) -> Ipv6Addr {
+        Ipv6Addr::new(0, 0, 0, 0, 0, 0, u16::from_be_bytes([self.octets[0], self.octets[1]]), u16::from_be_bytes([self.octets[2], self.octets[3]]))
+    }
+    pub fn to_ipv6_mapped(&self) -> Ipv6Addr {
+        Ipv6Addr::new(0, 0, 0, 0, 0, 0xffff, u16::from_be_bytes([self.octets[0], self.octets[1]]), u16::from_be_bytes([self.octets[2], self.octets[3]]))
+    }
+}
+
+impl From<[u8; 4]> for Ipv4Addr {
+    fn from(octets: [u8; 4]) -> Self { Self { octets } }
+}
+
+impl From<Ipv4Addr> for [u8; 4] {
+    fn from(ip: Ipv4Addr) -> Self { ip.octets }
+}
+
+impl fmt::Display for Ipv4Addr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}.{}.{}.{}", self.octets[0], self.octets[1], self.octets[2], self.octets[3])
+    }
+}
+
+impl FromStr for Ipv4Addr {
+    type Err = AddrParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split('.').collect();
+        if parts.len() != 4 { return Err(AddrParseError(())); }
+        let mut octets = [0u8; 4];
+        for (i, part) in parts.iter().enumerate() {
+            octets[i] = part.parse().map_err(|_| AddrParseError(()))?;
+        }
+        Ok(Ipv4Addr { octets })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Ipv6Addr {
+    segments: [u16; 8],
+}
+
+impl Ipv6Addr {
+    pub const fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> Self {
+        Self { segments: [a, b, c, d, e, f, g, h] }
+    }
+
+    pub const UNSPECIFIED: Self = Self { segments: [0; 8] };
+    pub const LOOPBACK: Self = Self { segments: [0, 0, 0, 0, 0, 0, 0, 1] };
+
+    pub fn segments(&self) -> [u16; 8] { self.segments }
+    pub fn octets(&self) -> [u8; 16] {
+        let mut oct = [0u8; 16];
+        for (i, &seg) in self.segments.iter().enumerate() {
+            oct[i * 2] = (seg >> 8) as u8;
+            oct[i * 2 + 1] = seg as u8;
+        }
+        oct
+    }
+    pub fn is_loopback(&self) -> bool { self.segments == [0, 0, 0, 0, 0, 0, 0, 1] }
+    pub fn is_unspecified(&self) -> bool { self.segments == [0; 8] }
+    pub fn is_multicast(&self) -> bool { self.segments[0] & 0xff00 == 0xff00 }
+    pub fn is_link_local(&self) -> bool { self.segments[0] & 0xffc0 == 0xfe80 }
+    pub fn is_unique_local(&self) -> bool { (self.segments[0] & 0xfe00) == 0xfc00 }
+    pub fn is_global(&self) -> bool {
+        !self.is_unspecified()
+            && !self.is_loopback()
+            && !self.is_multicast()
+            && !self.is_link_local()
+            && !self.is_unique_local()
+    }
+}
+
+impl From<[u8; 16]> for Ipv6Addr {
+    fn from(octets: [u8; 16]) -> Self {
+        let mut seg = [0u16; 8];
+        for i in 0..8 {
+            seg[i] = u16::from_be_bytes([octets[i * 2], octets[i * 2 + 1]]);
+        }
+        Self { segments: seg }
+    }
+}
+
+impl From<[u16; 8]> for Ipv6Addr {
+    fn from(segments: [u16; 8]) -> Self { Self { segments } }
+}
+
+impl fmt::Display for Ipv6Addr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Find the longest run of zero segments for compact notation
+        let mut best_start = 8;
+        let mut best_len = 0;
+        let mut cur_start = 8;
+        let mut cur_len = 0;
+        for (i, &seg) in self.segments.iter().enumerate() {
+            if seg == 0 {
+                if cur_len == 0 { cur_start = i; }
+                cur_len += 1;
+                if cur_len > best_len { best_start = cur_start; best_len = cur_len; }
+            } else {
+                cur_len = 0;
+            }
+        }
+        if best_len < 2 { best_start = 8; best_len = 0; }
+        for mut i in 0..8 {
+            if i == best_start {
+                if i == 0 { write!(f, "::")?; } else { write!(f, ":")?; }
+                i += best_len - 1;
+            } else if i > 0 {
+                write!(f, ":")?;
+            }
+            if i < best_start || i >= best_start + best_len {
+                write!(f, "{:x}", self.segments[i])?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl FromStr for Ipv6Addr {
+    type Err = AddrParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s == "::" { return Ok(Self::UNSPECIFIED); }
+        if s == "::1" { return Ok(Self::LOOPBACK); }
+        Err(AddrParseError(()))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IpAddr {
+    V4(Ipv4Addr),
+    V6(Ipv6Addr),
+}
+
+impl IpAddr {
+    pub fn is_loopback(&self) -> bool {
+        match self { IpAddr::V4(v4) => v4.is_loopback(), IpAddr::V6(v6) => v6.is_loopback() }
+    }
+    pub fn is_unspecified(&self) -> bool {
+        match self { IpAddr::V4(v4) => v4.is_unspecified(), IpAddr::V6(v6) => v6.is_unspecified() }
+    }
+    pub fn is_multicast(&self) -> bool {
+        match self { IpAddr::V4(v4) => v4.is_multicast(), IpAddr::V6(v6) => v6.is_multicast() }
+    }
+    pub fn is_global(&self) -> bool {
+        match self { IpAddr::V4(v4) => !v4.is_private() && !v4.is_loopback() && !v4.is_unspecified() && !v4.is_link_local(), IpAddr::V6(v6) => v6.is_global() }
+    }
+}
+
+impl From<Ipv4Addr> for IpAddr {
+    fn from(v4: Ipv4Addr) -> Self { IpAddr::V4(v4) }
+}
+
+impl From<Ipv6Addr> for IpAddr {
+    fn from(v6: Ipv6Addr) -> Self { IpAddr::V6(v6) }
+}
+
+impl fmt::Display for IpAddr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self { IpAddr::V4(v4) => v4.fmt(f), IpAddr::V6(v6) => v6.fmt(f) }
+    }
+}
+
+impl FromStr for IpAddr {
+    type Err = AddrParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.contains(':') {
+            s.parse::<Ipv6Addr>().map(IpAddr::V6)
+        } else {
+            s.parse::<Ipv4Addr>().map(IpAddr::V4)
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SocketAddrV4 {
+    ip: Ipv4Addr,
+    port: u16,
+}
+
+impl SocketAddrV4 {
+    pub const fn new(ip: Ipv4Addr, port: u16) -> Self { Self { ip, port } }
+    pub fn ip(&self) -> &Ipv4Addr { &self.ip }
+    pub fn port(&self) -> u16 { self.port }
+    pub fn set_ip(&mut self, ip: Ipv4Addr) { self.ip = ip; }
+    pub fn set_port(&mut self, port: u16) { self.port = port; }
+}
+
+impl fmt::Display for SocketAddrV4 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}", self.ip, self.port)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SocketAddrV6 {
+    ip: Ipv6Addr,
+    port: u16,
+    flowinfo: u32,
+    scope_id: u32,
+}
+
+impl SocketAddrV6 {
+    pub const fn new(ip: Ipv6Addr, port: u16, flowinfo: u32, scope_id: u32) -> Self {
+        Self { ip, port, flowinfo, scope_id }
+    }
+    pub fn ip(&self) -> &Ipv6Addr { &self.ip }
+    pub fn port(&self) -> u16 { self.port }
+    pub fn flowinfo(&self) -> u32 { self.flowinfo }
+    pub fn scope_id(&self) -> u32 { self.scope_id }
+    pub fn set_ip(&mut self, ip: Ipv6Addr) { self.ip = ip; }
+    pub fn set_port(&mut self, port: u16) { self.port = port; }
+    pub fn set_flowinfo(&mut self, flowinfo: u32) { self.flowinfo = flowinfo; }
+    pub fn set_scope_id(&mut self, scope_id: u32) { self.scope_id = scope_id; }
+}
+
+impl fmt::Display for SocketAddrV6 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{}]:{}", self.ip, self.port)
+    }
+}
+
+// ─── SocketAddr (existing, extended) ─────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SocketAddr {
@@ -28,6 +287,37 @@ impl SocketAddr {
             ip[i] = octet.parse().map_err(|_| ())?;
         }
         Ok(Self { ip, port })
+    }
+
+    pub fn ip(&self) -> Ipv4Addr {
+        Ipv4Addr::new(self.ip[0], self.ip[1], self.ip[2], self.ip[3])
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn set_ip(&mut self, ip: Ipv4Addr) {
+        self.ip = ip.octets();
+    }
+
+    pub fn set_port(&mut self, port: u16) {
+        self.port = port;
+    }
+
+    pub fn is_ipv4(&self) -> bool { true }
+    pub fn is_ipv6(&self) -> bool { false }
+}
+
+impl From<(Ipv4Addr, u16)> for SocketAddr {
+    fn from((ip, port): (Ipv4Addr, u16)) -> Self {
+        Self { ip: ip.octets(), port }
+    }
+}
+
+impl From<SocketAddrV4> for SocketAddr {
+    fn from(v4: SocketAddrV4) -> Self {
+        Self { ip: v4.ip().octets(), port: v4.port() }
     }
 }
 
@@ -81,6 +371,42 @@ impl ToSocketAddrs for String {
 
     fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
         self.as_str().to_socket_addrs()
+    }
+}
+
+impl ToSocketAddrs for Ipv4Addr {
+    type Iter = core::iter::Once<SocketAddr>;
+    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+        Ok(core::iter::once(SocketAddr::new(self.octets(), 0)))
+    }
+}
+
+impl ToSocketAddrs for Ipv6Addr {
+    type Iter = core::iter::Once<SocketAddr>;
+    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+        Ok(core::iter::once(SocketAddr::new([127, 0, 0, 1], 0)))
+    }
+}
+
+impl ToSocketAddrs for (Ipv4Addr, u16) {
+    type Iter = core::iter::Once<SocketAddr>;
+    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+        Ok(core::iter::once(SocketAddr::new(self.0.octets(), self.1)))
+    }
+}
+
+impl ToSocketAddrs for (&str, u16) {
+    type Iter = alloc::vec::IntoIter<SocketAddr>;
+    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+        let ip: Ipv4Addr = self.0.parse().map_err(|_| ErrorKind::InvalidInput)?;
+        Ok(alloc::vec![SocketAddr::new(ip.octets(), self.1)].into_iter())
+    }
+}
+
+impl ToSocketAddrs for SocketAddrV4 {
+    type Iter = core::iter::Once<SocketAddr>;
+    fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+        Ok(core::iter::once(SocketAddr::new(self.ip().octets(), self.port())))
     }
 }
 
