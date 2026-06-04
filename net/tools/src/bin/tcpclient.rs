@@ -19,7 +19,7 @@ fn do_request(host: &str, port: u16, data: &[u8]) -> Result<(), String> {
         .map_err(|e| format!("write: {}", e))?;
     eprintln!("Sent {} bytes", data.len());
 
-    let mut buf = [0u8; 65536];
+    let mut buf = vec![0u8; 65536];
     let mut total = 0usize;
     loop {
         match stream.read(&mut buf) {

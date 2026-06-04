@@ -3,17 +3,21 @@ set -e
 
 cargo build --release --package user
 cargo build --release --manifest-path ../posix/Cargo.toml --package tools --no-default-features
+cargo build --release --manifest-path ../net/Cargo.toml --package tools \
+  --no-default-features --features xv8 \
+  -Zbuild-std=core,alloc --target riscv64gc-unknown-none-elf
 rm -f target/fs.img
 
 # shellcheck disable=SC2046
 posix_bins=$(find ../posix/target/riscv64gc-unknown-none-elf/release -maxdepth 1 -type f -perm -u+x | sort)
+# shellcheck disable=SC2046
+net_bins=$(find ../net/target/riscv64gc-unknown-none-elf/release -maxdepth 1 -type f -perm -u+x | sort)
 
 # Add only necessary xv8 binaries that don't conflict with posix
 # init, poweroff, demo, primes, udp, uptime, zombie are unique to xv8
 # We use full path so mkfs adds them with correct names (/init, /poweroff, etc.)
 user_bins="
 target/riscv64gc-unknown-none-elf/release/demo
-target/riscv64gc-unknown-none-elf/release/dns
 target/riscv64gc-unknown-none-elf/release/init
 target/riscv64gc-unknown-none-elf/release/poweroff
 target/riscv64gc-unknown-none-elf/release/primes
@@ -30,6 +34,7 @@ cargo run \
   --target "$(rustc -vV | grep host | cut -d' ' -f2)" -- \
   target/fs.img \
   $posix_bins \
+  $net_bins \
   $user_bins \
   LICENSE \
   "$@"

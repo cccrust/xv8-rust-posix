@@ -236,6 +236,13 @@ test = false
 doctest = false
 bench = false
 
+[[bin]]
+name = "_nettools"
+path = "testbin/nettools.rs"
+test = false
+doctest = false
+bench = false
+
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
 
