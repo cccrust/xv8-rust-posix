@@ -115,3 +115,10 @@ build-std = ["core", "compiler_builtins", "alloc"]
 - 只有直接使用 `std::*` 的程式碼能被 overlay 取代
 - `libc` 相關 API 在 riscv64 由 `xv8-libc-compat` 提供最小相容層；部分函式仍是 stub，僅保證編譯
 - 許多 stub 回傳 `Unsupported`，執行時期會失敗
+
+## 下一步：async / web runtime
+
+- 已新增 `xv8rust/xv8-async`，提供單執行緒 async runtime / reactor scaffold
+- 已新增 `xv8rust/xv8-axum-smoke`，先把本地 `tokio` / `axum` 的 host smoke path 跑通
+- 下一步是把同一條 smoke path 移到 xv8 target，並補齊 `tokio::net` / `tokio::time` / `tokio::spawn` 需要的剩餘面
+- 若遇到 upstream crate 的額外要求，優先把缺口回寫到 `xv8-user-std`，再評估是否需要新的 shim crate

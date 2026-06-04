@@ -11,6 +11,7 @@
 - [`v0.5.md`](v0.5.md) — 警告整理、`read_link`、`spawn`
 - [`v0.6.md`](v0.6.md) — 根目錄 `test.sh` 與全鏈路驗證完成
 - [`v1.0.md`](v1.0.md) — 供應商化 crossterm、riscv64 terminal backend、heredoc 修正、全測試通過
+- [`v1.1.md`](v1.1.md) — async runtime / Axum smoke test 規劃與實作記錄
 
 ## 總覽
 

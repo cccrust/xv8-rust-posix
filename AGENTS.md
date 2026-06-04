@@ -6,7 +6,7 @@ Multi-project Rust workspace (NOT a root Cargo workspace). Four independent work
 |---------|-----|------|
 | xv8 OS | `xv8/` | RISC-V Unix-like OS (nightly + `qemu-system-riscv64`) |
 | POSIX tools | `posix/` | 124 POSIX utilities + shell |
-| xv8 std | `xv8rust/` | std overlay so POSIX tools compile for riscv64 |
+| xv8 std | `xv8rust/` | std overlay + experimental async/runtime scaffolding for riscv64 |
 | Network tools | `net/` | ping, dns, tcp, echo, ntp, whois, http, curl, ssh |
 
 ## Key Commands
@@ -28,6 +28,9 @@ cd net   && ./test.sh             # Network smoke (dns, ntp, tcp echo, whois)
 - **`posix/.cargo/config.toml`** — riscv64 cross-compile config (target, linker, `build-std`). **`test_posix_host.sh` stashes this to `.bak`** to avoid host build conflicts, then restores it. If host builds fail, check if this file is missing.
 - **`libc` → `xv8-libc-compat`** — `posix/tools/Cargo.toml` imports `libc` which resolves to `xv8rust/xv8-libc-compat`. On riscv64 provides syscall wrappers; on host delegates to real `libc`.
 - **`crossterm` → `xv8rust/crossterm/`** — vendored crossterm 0.29.0. Enables vi/vim on host. riscv64 uses `--no-default-features` to exclude it (`vi`/`vim` have `required-features = ["crossterm"]`).
+- **`xv8rust/xv8-async/`** — experimental single-thread executor / timer reactor layered on `xv8rust/xv8-user-std`; this is the entry point for Tokio/Axum smoke testing, not a full Tokio runtime.
+- **`xv8rust/xv8-axum-smoke/`** — host-side smoke harness that builds against the local `tokio` and `axum` sources; `xv8rust/Cargo.toml` patches `tokio` to the checked-in local source so the graph stays unified.
+- **Async support is incremental** — `xv8rust/xv8-user-std` already covers fd, time, sync, and TCP primitives needed by async adapters; track remaining work against `xv8rust/_doc/plan.md` plus `_doc/todo3.md`.
 - **`riscv64gc-unknown-none-elf` is neither `cfg(unix)` nor `cfg(windows)`** — platform-specific code must check `target_arch`.
 - **Toolchain**: nightly + target `riscv64gc-unknown-none-elf` (set in `xv8/rust-toolchain.toml`)
 - **Resolver mismatch**: `net/` uses resolver `"2"`, `posix/` and `xv8rust/` use `"3"`
@@ -69,6 +72,7 @@ cd posix && cargo build --release && PATH="target/release:$PATH" sh tools/tests/
 ## Planning & Docs
 
 - `_doc/todo.md` — master development plan (v1.3+)
+- `_doc/todo3.md` — xv8rust async / network roadmap (Tokio/Axum bridge work lives here)
 - `_doc/xv8-net-status.md` — detailed network stack architecture
 - `MEMORY.md` — session notes (may be stale)
 - `_doc/v*.md` — per-version changelogs
