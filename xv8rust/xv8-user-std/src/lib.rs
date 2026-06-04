@@ -1,6 +1,6 @@
 #![no_std]
-#![feature(lang_items)]
-#![allow(internal_features)]
+#![cfg_attr(feature = "standalone", feature(lang_items))]
+#![cfg_attr(feature = "standalone", allow(internal_features))]
 
 extern crate alloc;
 
@@ -40,6 +40,7 @@ macro_rules! eprintln {
     }};
 }
 
+#[cfg(feature = "standalone")]
 mod runtime;
 
 pub mod io;

@@ -81,6 +81,16 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 - xv8 QEMU `_http` 測試通過（13/13）
 - 不使用第三方 HTTP crate，純 `libnet::TcpStream` 實作
 
+## v2.4 — xv8 QEMU Async Runtime（`block_on` + `Sleep`）✅
+
+**已於 `_doc/v2.4.md` 記錄。**
+- `xv8/user/testbin/async.rs` — 自包含的 async executor（zero extern deps）
+- 完全避免 `csrr sstatus`（因 `riscv64gc-unknown-none-elf` 的 atomic 實作會使用 supervisor CSR）
+- 使用 `Pin<&mut F>` on stack + dummy waker + poll-loop（zero atomics）
+- `Sleep` future 由 `uptime` 驅動，單執行緒
+- xv8 QEMU `_async` 測試通過（14/14）：6 項 subtests
+- Root `test.sh` 全專案合併測試（9/9 passed）
+
 ## 版本對照
 
 | 版本 | 主要內容 | 依賴 |
@@ -92,6 +102,11 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 | v1.7 | ex, fc | v1.3 (shell 依賴) |
 | v1.8 | iconv 編碼擴充 | 無 |
 | v2.0 | users/who 強化 + rev/col/look/last | 無 |
-| v2.1 | xv8 核心網路（TCP、HTTP、TLS）✅ | v2.0 |
+| v2.1 | xv8 核心網路（TCP、HTTP、TLS） | v2.0 |
 | v2.2 | xv8rust/net bridge + 網路工具移植 ✅ | v2.1 |
 | v2.3 | HTTP 支援（httpd + httpget）✅ | v2.2 |
+| v2.4 | Async Runtime（`block_on` + `Sleep`）✅ | v2.3 |
+
+### Next
+- v2.5: Richer async runtime (`xv8-async` crate) with proper waker scheduling, spawn, timer reactor
+- v2.5+: xv8-axum-smoke with tokio+axum patched for xv8 target

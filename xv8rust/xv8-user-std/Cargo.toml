@@ -8,4 +8,5 @@ xv8-libc = { path = "../xv8-libc" }
 hashbrown = "0.15"
 
 [features]
-default = []
+default = ["standalone"]
+standalone = []
