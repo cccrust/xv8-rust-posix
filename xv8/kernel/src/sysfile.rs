@@ -329,6 +329,7 @@ pub fn sys_open(args: &SyscallArgs) -> Result<usize, SysError> {
     file_inner.readable = (o_mode & OpenFlag::WRITE_ONLY) == 0;
     file_inner.writeable =
         (o_mode & OpenFlag::WRITE_ONLY) != 0 || (o_mode & OpenFlag::READ_WRITE != 0);
+    file_inner.nonblocking = (o_mode & OpenFlag::NON_BLOCK) != 0;
 
     if (o_mode & OpenFlag::TRUNCATE) != 0 && inode_inner.r#type == InodeType::File {
         inode.trunc(&mut inode_inner);
@@ -948,6 +949,34 @@ pub fn sys_pwrite(args: &SyscallArgs) -> Result<usize, SysError> {
             written.map(|w| w as usize).map_err(|_| SysError::IoError)
         }
         _ => Err(SysError::BadDescriptor),
+    }
+}
+
+const F_GETFL: isize = 3;
+const F_SETFL: isize = 4;
+
+pub fn sys_fcntl(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd = args.get_int(0) as usize;
+    let cmd = args.get_int(1);
+    let arg = args.get_int(2) as usize;
+
+    if fd >= crate::param::NOFILE {
+        err!(SysError::BadDescriptor);
+    }
+
+    let (_, file) = try_log!(args.get_file(0));
+    let mut inner = FILE_TABLE.inner[file.id].lock();
+
+    match cmd {
+        F_GETFL => {
+            let flags = if inner.nonblocking { OpenFlag::NON_BLOCK } else { 0 };
+            Ok(flags)
+        }
+        F_SETFL => {
+            inner.nonblocking = (arg & OpenFlag::NON_BLOCK) != 0;
+            Ok(0)
+        }
+        _ => err!(SysError::InvalidArgument),
     }
 }
 

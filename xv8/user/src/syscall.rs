@@ -357,6 +357,26 @@ pub mod raw {
         syscall3(Syscall::TcpRecv, fd, buf as usize, len)
     }
 
+    pub fn fcntl(fd: usize, cmd: isize, arg: usize) -> isize {
+        syscall3(Syscall::Fcntl, fd, cmd as usize, arg)
+    }
+
+    pub fn poll(fds: *mut kernel::abi::PollFd, nfds: usize, timeout: isize) -> isize {
+        syscall3(Syscall::Poll, fds as usize, nfds, timeout as usize)
+    }
+
+    pub fn epoll_create1(flags: usize) -> isize {
+        syscall1(Syscall::EpollCreate1, flags)
+    }
+
+    pub fn epoll_ctl(epfd: usize, op: usize, fd: usize, event: *const kernel::abi::EpollEvent) -> isize {
+        syscall4(Syscall::EpollCtl, epfd, op, fd, event as usize)
+    }
+
+    pub fn epoll_wait(epfd: usize, events: *mut kernel::abi::EpollEvent, max_events: usize, timeout: isize) -> isize {
+        syscall4(Syscall::EpollWait, epfd, events as usize, max_events, timeout as usize)
+    }
+
     pub fn getpgid(pid: usize) -> isize {
         syscall1(Syscall::Getpgid, pid)
     }
@@ -887,4 +907,32 @@ pub fn tcp_send(fd: Fd, buf: &[u8]) -> Result<usize, SysError> {
 
 pub fn tcp_recv(fd: Fd, buf: &mut [u8]) -> Result<usize, SysError> {
     check(raw::tcp_recv(fd.as_raw(), buf.as_mut_ptr(), buf.len()))
+}
+
+pub fn fcntl(fd: Fd, cmd: isize, arg: usize) -> Result<usize, SysError> {
+    check(raw::fcntl(fd.as_raw(), cmd, arg))
+}
+
+pub fn set_nonblocking(fd: Fd) -> Result<(), SysError> {
+    check_unit(raw::fcntl(fd.as_raw(), 4, 0x800)) // F_SETFL=4, O_NONBLOCK=0x800
+}
+
+pub fn poll(fds: &mut [kernel::abi::PollFd], timeout: isize) -> Result<usize, SysError> {
+    check(raw::poll(fds.as_mut_ptr(), fds.len(), timeout))
+}
+
+pub fn epoll_create1(flags: usize) -> Result<Fd, SysError> {
+    check(raw::epoll_create1(flags)).map(Fd)
+}
+
+pub fn epoll_ctl(epfd: Fd, op: usize, fd: Fd, event: Option<&kernel::abi::EpollEvent>) -> Result<(), SysError> {
+    let ptr = match event {
+        Some(e) => e as *const _,
+        None => core::ptr::null(),
+    };
+    check_unit(raw::epoll_ctl(epfd.as_raw(), op, fd.as_raw(), ptr))
+}
+
+pub fn epoll_wait(epfd: Fd, events: &mut [kernel::abi::EpollEvent], timeout: isize) -> Result<usize, SysError> {
+    check(raw::epoll_wait(epfd.as_raw(), events.as_mut_ptr(), events.len(), timeout))
 }

@@ -7,6 +7,7 @@ use crate::fs::FsError;
 use crate::net::NetError;
 use crate::param::NOFILE;
 use crate::proc::{Proc, TrapFrame, current_proc, current_proc_and_data_mut};
+use crate::poll::*;
 use crate::sysfile::*;
 use crate::sysnet::*;
 use crate::sysproc::*;
@@ -372,6 +373,11 @@ pub enum Syscall {
     TcpConnect = 112,
     TcpSend = 113,
     TcpRecv = 114,
+    Fcntl = 115,
+    Poll = 116,
+    EpollCreate1 = 117,
+    EpollCtl = 118,
+    EpollWait = 119,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -492,6 +498,11 @@ impl TryFrom<usize> for Syscall {
             112 => Ok(Syscall::TcpConnect),
             113 => Ok(Syscall::TcpSend),
             114 => Ok(Syscall::TcpRecv),
+            115 => Ok(Syscall::Fcntl),
+            116 => Ok(Syscall::Poll),
+            117 => Ok(Syscall::EpollCreate1),
+            118 => Ok(Syscall::EpollCtl),
+            119 => Ok(Syscall::EpollWait),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -620,6 +631,11 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::TcpConnect => sys_tcp_connect(&args),
             Syscall::TcpSend => sys_tcp_send(&args),
             Syscall::TcpRecv => sys_tcp_recv(&args),
+            Syscall::Fcntl => sys_fcntl(&args),
+            Syscall::Poll => sys_poll(&args),
+            Syscall::EpollCreate1 => sys_epoll_create1(&args),
+            Syscall::EpollCtl => sys_epoll_ctl(&args),
+            Syscall::EpollWait => sys_epoll_wait(&args),
         },
         Err(e) => Err(e),
     };

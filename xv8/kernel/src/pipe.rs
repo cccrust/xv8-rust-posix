@@ -101,6 +101,16 @@ impl Pipe {
         Ok((f0, f1))
     }
 
+    pub fn readable(&self) -> bool {
+        let inner = self.inner.lock();
+        inner.num_read < inner.num_write || !inner.write_open
+    }
+
+    pub fn writeable(&self) -> bool {
+        let inner = self.inner.lock();
+        inner.read_open && inner.num_write < inner.num_read + PIPESIZE
+    }
+
     /// Returns the Arc pointer address as pipe id
     /// The pointer will be unique and constant for the life time of this pipe.
     fn pipe_id(&self) -> usize {

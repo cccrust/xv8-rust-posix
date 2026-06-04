@@ -6,6 +6,7 @@ use crate::net::ipv4::Ipv4Proto;
 use crate::net::route;
 use crate::net::{self, Be, Ipv4Addr, NetError, NetworkHeader};
 use crate::param::NTCP;
+use crate::poll;
 use crate::proc::{self, Channel};
 use crate::spinlock::SpinLock;
 
@@ -121,6 +122,8 @@ pub struct TcpConnection {
     recv_buf: Vec<u8>,
     recv_ready: bool,
     backlog: Vec<usize>,
+    pub nonblocking: bool,
+    pub epoll_instances: Vec<usize>,
 }
 
 impl TcpConnection {
@@ -136,19 +139,21 @@ impl TcpConnection {
             recv_buf: Vec::new(),
             recv_ready: false,
             backlog: Vec::new(),
+            nonblocking: false,
+            epoll_instances: Vec::new(),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct TcpTable {
-    entries: [Option<TcpConnection>; NTCP],
+    pub entries: [Option<TcpConnection>; NTCP],
     next_ephemeral: u16,
 }
 
 const EPHEMERAL_PORT_START: u16 = 32768;
 
-static TCP_TABLE: SpinLock<TcpTable> = SpinLock::new(
+pub(crate) static TCP_TABLE: SpinLock<TcpTable> = SpinLock::new(
     TcpTable {
         entries: [const { None }; NTCP],
         next_ephemeral: EPHEMERAL_PORT_START,
@@ -207,7 +212,7 @@ impl TcpTable {
     }
 
     pub fn connect(id: usize, remote_ip: Ipv4Addr, remote_port: u16) -> Result<(), NetError> {
-        let (local_port, seq) = {
+        let (local_port, seq, is_nonblocking) = {
             let mut table = TCP_TABLE.lock();
             if table.entries[id].is_none() { err!(NetError::BadSocket) }
             let needs_port = table.entries[id].as_ref().unwrap().local_port == 0;
@@ -222,9 +227,13 @@ impl TcpTable {
             entry.remote_port = remote_port;
             entry.send_seq = 1000;
             entry.state = TcpState::SynSent;
-            (entry.local_port, entry.send_seq)
+            (entry.local_port, entry.send_seq, entry.nonblocking)
         };
         transmit_tcp(remote_ip, remote_port, local_port, seq, 0, TCP_SYN, &[])?;
+
+        if is_nonblocking {
+            return Err(NetError::ResourceUnavailable);
+        }
 
         // Wait for handshake to complete
         loop {
@@ -250,6 +259,9 @@ impl TcpTable {
                 let entry = table.entries[id].as_mut().ok_or(NetError::BadSocket)?;
                 if !matches!(entry.state, TcpState::Listen) { err!(NetError::InvalidAddress) }
                 if entry.backlog.is_empty() {
+                    if entry.nonblocking {
+                        err!(NetError::ResourceUnavailable)
+                    }
                     let ptr = entry as *const _ as usize;
                     let _ = entry;
                     table = proc::sleep(Channel::Buffer(ptr), table);
@@ -323,9 +335,21 @@ impl TcpTable {
 
             if matches!(entry.state, TcpState::Closed) { return Ok(0); }
 
+            if entry.nonblocking {
+                err!(NetError::ResourceUnavailable)
+            }
+
             table = proc::sleep(Channel::Buffer(entry as *const _ as usize), table);
         }
     }
+}
+
+pub fn tcp_readiness(id: usize) -> (bool, bool) {
+    let table = TCP_TABLE.lock();
+    let Some(ref entry) = table.entries[id] else { return (false, false) };
+    let readable = entry.recv_ready && !entry.recv_buf.is_empty();
+    let writable = matches!(entry.state, TcpState::Established);
+    (readable, writable)
 }
 
 pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<(), NetError> {
@@ -340,7 +364,6 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
     let has_ack = flags & TCP_ACK != 0;
     let has_fin = flags & TCP_FIN != 0;
     let has_rst = flags & TCP_RST != 0;
-    let has_psh = flags & TCP_PSH != 0;
 
     // SYN (no ACK) → passive open, find listener
     if has_syn && !has_ack {
@@ -363,6 +386,7 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
 
     // SYN-ACK → client side handshake completion
     if has_syn && has_ack {
+        let epoll_to_wake: Vec<(usize, u32)>;
         let mut table = TCP_TABLE.lock();
         for (id, entry) in table.entries.iter_mut().enumerate() {
             if let Some(c) = entry {
@@ -371,9 +395,12 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
                     c.send_seq = ack;
                     c.recv_seq = seq.wrapping_add(1);
                     let (lport, rip, rport, sseq, rseq) = (c.local_port, c.remote_ip, c.remote_port, c.send_seq, c.recv_seq);
+                    epoll_to_wake = c.epoll_instances.iter().map(|&epfd| (epfd, poll::EPOLLOUT)).collect();
                     proc::wakeup(Channel::Buffer(c as *const _ as usize));
                     drop(table);
-                    // Send ACK to complete server-side handshake (SynReceived -> Established)
+                    for (epfd, ev) in epoll_to_wake {
+                        poll::epoll_notify_instances(epfd, ev);
+                    }
                     let _ = transmit_tcp(rip, rport, lport, sseq, rseq, TCP_ACK, &[]);
                     return Ok(());
                 }
@@ -383,8 +410,8 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
     }
 
     // ACK of SYN-ACK → server side handshake completion
-    // Also matches data-bearing PSH+ACK for SynReceived state (e.g., first data packet)
     if has_ack && !has_syn && !has_fin {
+        let mut listener_epoll = Vec::new();
         let mut table = TCP_TABLE.lock();
         for child_id in 0..NTCP {
             let (state, local_port) = match &table.entries[child_id] {
@@ -398,26 +425,37 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
             if let Some(listener) = table.find_listener(local_port) {
                 if let Some(p) = table.entries[listener].as_mut() {
                     p.backlog.push(child_id);
+                    listener_epoll = p.epoll_instances.clone();
                     proc::wakeup(Channel::Buffer(p as *const _ as usize));
                 }
             }
         }
-        // Do NOT return yet — data in a PSH+ACK for SynReceived should fall through to handler #6
-        // Re-check: if a SynReceived entry was transitioned, the packet may carry data.
-        // We'll fall through below for data processing on the now-Established connection.
+        drop(table);
+        for epfd in listener_epoll {
+            poll::epoll_notify_instances(epfd, poll::EPOLLIN);
+        }
     }
 
     // Data delivery / FIN / RST to established connections
     if has_rst {
+        let epoll_to_wake: Vec<(usize, u32)>;
         let mut table = TCP_TABLE.lock();
         if let Some(id) = table.find_established(src_ip, src_port, dest_port) {
             let c = table.entries[id].as_mut().unwrap();
+            epoll_to_wake = c.epoll_instances.iter().map(|&epfd| (epfd, poll::EPOLLHUP | poll::EPOLLERR)).collect();
             c.state = TcpState::Closed;
             proc::wakeup(Channel::Buffer(c as *const _ as usize));
+            drop(table);
+            for (epfd, ev) in epoll_to_wake {
+                poll::epoll_notify_instances(epfd, ev);
+            }
+        } else {
+            drop(table);
         }
         return Ok(());
     }
 
+    let mut epoll_to_wake: Vec<(usize, u32)> = Vec::new();
     let mut table = TCP_TABLE.lock();
     let Some(conn_id) = table.find_established(src_ip, src_port, dest_port) else { return Ok(()) };
 
@@ -426,7 +464,12 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
         conn.state = TcpState::CloseWait;
         conn.recv_seq = seq.wrapping_add(1);
         conn.recv_ready = true;
+        epoll_to_wake = conn.epoll_instances.iter().map(|&epfd| (epfd, poll::EPOLLIN | poll::EPOLLHUP)).collect();
         proc::wakeup(Channel::Buffer(conn as *const _ as usize));
+        drop(table);
+        for (epfd, ev) in epoll_to_wake {
+            poll::epoll_notify_instances(epfd, ev);
+        }
         return Ok(());
     }
 
@@ -447,12 +490,16 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
                     conn.recv_buf.extend_from_slice(data);
                     conn.recv_seq = seq.wrapping_add(data.len() as u32);
                     conn.recv_ready = true;
+                    epoll_to_wake = conn.epoll_instances.iter().map(|&epfd| (epfd, poll::EPOLLIN)).collect();
                     proc::wakeup(Channel::Buffer(conn as *const _ as usize));
                 }
             }
             (conn.local_port, conn.remote_ip, conn.remote_port, conn.send_seq, conn.recv_seq)
         };
         drop(table);
+        for (epfd, ev) in epoll_to_wake {
+            poll::epoll_notify_instances(epfd, ev);
+        }
         let _ = transmit_tcp(rip, rport, lport, sseq, rseq, TCP_ACK, &[]);
     }
 

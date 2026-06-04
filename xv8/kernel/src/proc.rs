@@ -303,6 +303,8 @@ pub enum Channel {
     PipeWrite(usize),
     /// Network
     Network,
+    /// epoll instance
+    Epoll(usize),
 }
 
 /// Process control block

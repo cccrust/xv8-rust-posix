@@ -25,6 +25,7 @@ pub enum FileType {
     Socket { socket_id: usize },
     Ping { socket_id: usize },
     TcpSocket { tcp_id: usize },
+    Epoll { epoll_id: usize },
 }
 
 /// File metadata protected by table-wide spinlock
@@ -36,11 +37,11 @@ pub struct FileMeta {
 /// Per-file mutable state protected by per-file sleeplock
 #[derive(Debug, Clone)]
 pub struct FileInner {
-    /// Index into the file table.
     pub readable: bool,
     pub writeable: bool,
     pub r#type: FileType,
     pub offset: u32,
+    pub nonblocking: bool,
 }
 
 pub static FILE_TABLE: FileTable = FileTable::new();
@@ -65,6 +66,7 @@ impl FileTable {
                     writeable: false,
                     r#type: FileType::None,
                     offset: 0,
+                    nonblocking: false,
                 },
                 "file",
             )
@@ -131,7 +133,7 @@ impl File {
             copy
         }; // drop both inner and meta locks
 
-         match inner_copy.r#type {
+match inner_copy.r#type {
              FileType::None => {}
              FileType::Pipe { pipe } => {
                  pipe.close(inner_copy.writeable);
@@ -140,11 +142,14 @@ impl File {
                  let _op = Operation::begin();
                  inode.put();
              }
-FileType::Socket { socket_id } => SocketTable::close(socket_id),
+ FileType::Socket { socket_id } => SocketTable::close(socket_id),
             FileType::TcpSocket { tcp_id } => TcpTable::close(tcp_id),
             FileType::Ping { socket_id } => {
                  crate::net::ping::PingTable::close(socket_id);
              }
+            FileType::Epoll { epoll_id } => {
+                crate::poll::free_epoll_id(epoll_id);
+            }
          }
     }
 
@@ -216,6 +221,9 @@ FileType::Socket { socket_id } => SocketTable::close(socket_id),
             FileType::Ping { socket_id: _ } => {
                 err!(SysError::BadDescriptor);
             }
+            FileType::Epoll { .. } => {
+                err!(SysError::BadDescriptor);
+            }
         }
     }
 
@@ -284,6 +292,9 @@ FileType::Socket { socket_id } => SocketTable::close(socket_id),
             FileType::Ping { socket_id: _ } => {
                 err!(SysError::InvalidArgument);
             }
+            FileType::Epoll { .. } => {
+                err!(SysError::InvalidArgument);
+            }
         }
     }
 
@@ -308,6 +319,8 @@ FileType::Socket { socket_id } => SocketTable::close(socket_id),
                 err!(SysError::NotImplemented)
             }
 
+            FileType::Epoll { .. } => err!(SysError::NotImplemented),
+
             _ => err!(SysError::BadDescriptor),
         }
     }
@@ -317,7 +330,7 @@ FileType::Socket { socket_id } => SocketTable::close(socket_id),
 
          match &file_inner.r#type {
              FileType::None => err!(SysError::BadDescriptor),
-             FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } => err!(SysError::IsDirectory),
+             FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } | FileType::Epoll { .. } => err!(SysError::IsDirectory),
              FileType::Inode { .. } | FileType::Device { .. } => {
                 let new_offset = match whence {
                     0 => { // SEEK_SET
@@ -368,6 +381,7 @@ FileType::Socket { socket_id } => SocketTable::close(socket_id),
                 inode.unlock(inode_inner);
                 Ok(())
             }
+            FileType::Epoll { .. } => err!(SysError::BadDescriptor),
             _ => err!(SysError::BadDescriptor),
         }
     }
@@ -384,6 +398,7 @@ FileType::Socket { socket_id } => SocketTable::close(socket_id),
                 inode.unlock(inode_inner);
                 Ok(())
             }
+            FileType::Epoll { .. } => err!(SysError::BadDescriptor),
             _ => err!(SysError::BadDescriptor),
         }
     }
@@ -401,6 +416,7 @@ FileType::Socket { socket_id } => SocketTable::close(socket_id),
                 inode.unlock(inode_inner);
                 Ok(())
             }
+            FileType::Epoll { .. } => err!(SysError::BadDescriptor),
             _ => err!(SysError::BadDescriptor),
         }
     }

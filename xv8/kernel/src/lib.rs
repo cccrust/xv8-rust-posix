@@ -21,6 +21,7 @@ pub(crate) mod log;
 pub(crate) mod memlayout;
 pub(crate) mod net;
 pub(crate) mod param;
+pub(crate) mod poll;
 pub(crate) mod pci;
 pub(crate) mod pipe;
 pub(crate) mod plic;
