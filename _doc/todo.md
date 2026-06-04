@@ -67,10 +67,12 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 
 ---
 
-## v2.2 — xv8rust/net bridge + 網路工具移植
+## v2.2 — xv8rust/net bridge + 網路工具移植 ✅
 
-**進行中，見 `_doc/todo3.md`。**
+**已於 `_doc/v2.2.md` 記錄。**
 - Step 1 ✅：`xv8rust/xv8-net/` 最小 `std::net` 相容層（host + riscv64 雙目標編譯通過）
+- Step 2 ✅：`net/libnet` platform abstraction + `net/tools` riscv64 build
+- Step 3 ✅：xv8 QEMU 整合測試（12/12 passed），root `test.sh` 全專案合併測試（9/9 passed）
 
 ## 版本對照
 
@@ -84,4 +86,4 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 | v1.8 | iconv 編碼擴充 | 無 |
 | v2.0 | users/who 強化 + rev/col/look/last | 無 |
 | v2.1 | xv8 核心網路（TCP、HTTP、TLS）✅ | v2.0 |
-| v2.2 | xv8rust/net bridge + 網路工具移植 ⬜ | v2.1 |
+| v2.2 | xv8rust/net bridge + 網路工具移植 ✅ | v2.1 |

@@ -1,51 +1,44 @@
 # Memory Log for xv8-rust-posix
 
-## What has been done
+## Current State (v2.2 — completed)
 
-1. **shell.sh**: Created to build and launch POSIX shell with network tools.
-   - Builds posix/tools and net/tools (release)
-   - Adds their release binaries to PATH
-   - Executes the POSIX shell (sh) with prompt "posix> "
+xv8 QEMU integration tests pass 12/12. Root `test.sh` suite passes 9/9 phases.
 
-2. **Modified sh.rs**: Changed the REPL prompt from "$ " to "posix> ".
+### Architecture
 
-3. **Added network tools** (in net/tools/src/bin/):
-   - netstat.rs: Simplified netstat (Linux only)
-   - http_server.rs: Tiny HTTP server serving current directory on port 8080
-   - curl.rs: Simple HTTP GET client using ureq
-   - ssh_client.rs: Placeholder SSH client (prints arguments)
-   - ssh_server.rs: Placeholder SSH server (not yet implemented due to complexity)
+- `xv8rust/xv8-net/` — `#![no_std]` `std::net` compatibility layer for riscv64 (492 lines)
+- `net/libnet/src/net_impl.rs` — platform abstraction: host uses `std::net`, xv8 uses `xv8_net::net`
+- 7 net tools cross-compiled for riscv64: `dns`, `host`, `ntp`, `tcpclient`, `tcpserver`, `tftp`, `whois`
+- `xv8/mkfs.sh` builds net tools + includes them in `fs.img`
 
-4. **Updated net/tools/Cargo.toml**:
-   - Added bin declarations for the new tools
-   - Added dependencies: tiny_http, ureq, ssh2, tokio, hyper, rand
+### Key Test Infrastructure
 
-5. **Created _doc/plan.md**: Outlines planned network tools to add.
+- `xv8/user/testbin/nettools.rs` — QEMU testbin: fork+exec tcpserver + tcpclient, verifies TCP communication
+- Root `test.sh` — comprehensive multi-phase test runner (stashes/restores posix/.cargo/config.toml)
+- QEMU tests: fs, pipe, proc, fd, sbrk, cow, net, syscall, neteth, netdns, tcpecho, nettools
 
-## What needs to be done next
+### Critical Gotchas
 
-- Implement real ssh_client.rs and ssh_server.rs (may require elevated privileges or be complex).
-- Add more network tools from plan.md (traceroute, nc, ftp, etc.).
-- Test each tool to ensure they work as expected.
-- Consider adding a tool to generate RSA keys for SSH.
-- Ensure the shell.sh script works after each addition (rebuilds automatically).
+- kernel `tcp_connect()` is infinite busy-wait with no timeout
+- xv8 user stack is only `USERSTACK = 4` pages (16 KB) — stack arrays > 16KB cause page fault
+- `set_read_timeout`/`set_write_timeout` are no-op stubs on xv8
+- `posix/.cargo/config.toml` has `[build] target = "riscv64gc-unknown-none-elf"` — must stash before host build
 
-## How to test
+### Build Commands
 
-Run:
 ```bash
-./shell.sh
+# Host build
+cargo build --release --manifest-path posix/Cargo.toml
+cargo build --release --manifest-path net/Cargo.toml
+
+# RISC-V cross-compile
+cargo build --release --manifest-path posix/Cargo.toml --target riscv64gc-unknown-none-elf --no-default-features -Zbuild-std=core,alloc
+cargo build --release --manifest-path net/Cargo.toml --target riscv64gc-unknown-none-elf --no-default-features --features xv8 -Zbuild-std=core,alloc
+
+# Full suite
+./test.sh
 ```
-Then inside the shell, try commands like:
-- `ls` (should show posix tools)
-- `ping 8.8.8.8`
-- `host google.com`
-- `curl http://example.com`
-- `netstat -tuln` (if on Linux)
-- In another terminal, start the http_server: `http_server` and curl it.
 
-## Notes
+### Next Up
 
-- The shell prompt is now "posix> " to distinguish from host shell.
-- All tools are built for the host machine (no QEMU/xv8 needed).
-- Some tools (like netstat) are platform-specific (Linux only in current implementation).
+- v2.3: HTTP/TLS support, curl/http_server running on xv8
