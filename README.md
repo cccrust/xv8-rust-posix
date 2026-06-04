@@ -8,7 +8,7 @@ Xv8-rust-posix 是基於 xv6-riscv 延伸的全 Rust 作業系統專案，包含
 |------|------|------|------|
 | xv8 OS | `xv8/` | RISC-V Unix-like 核心（QEMU virt），110+ 系統呼叫、網路堆疊、日誌檔案系統 | 11/11 測試通過 |
 | POSIX 工具 | `posix/` | 124 個 POSIX.1-2008 相容工具 + 完整 shell（管線、重導、工作控制） | 33/33 shell + 21/21 core 測試通過 |
-| xv8 std | `xv8_std/` | 跨平臺標準函式庫：xv8-user-std（riscv64 no_std）、xv8-libc（系統呼叫層）、crossterm（終端操作） | riscv64 交叉編譯成功 |
+| xv8 std | `xv8rust/` | 跨平臺標準函式庫：xv8-user-std（riscv64 no_std）、xv8-libc（系統呼叫層）、crossterm（終端操作） | riscv64 交叉編譯成功 |
 | 網路工具 | `net/` | 13 個主機端網路工具（ping、dns、tcp、ntp、whois 等） | 煙霧測試通過 |
 
 ## 快速開始
@@ -50,7 +50,7 @@ cd posix && cargo build --release
 
 # riscv64 交叉編譯
 cargo build --release --manifest-path posix/Cargo.toml --target riscv64gc-unknown-none-elf --no-default-features
-cargo build --release --manifest-path xv8_std/Cargo.toml --target riscv64gc-unknown-none-elf
+cargo build --release --manifest-path xv8rust/Cargo.toml --target riscv64gc-unknown-none-elf
 
 # 含 crossterm（vi/vim）的 riscv64 建置
 cargo build --release -p tools --target riscv64gc-unknown-none-elf --features crossterm

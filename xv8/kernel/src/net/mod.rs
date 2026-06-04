@@ -22,6 +22,7 @@ pub(crate) mod ipv4;
 pub(crate) mod loopback;
 pub(crate) mod route;
 pub(crate) mod udp;
+pub(crate) mod tcp;
 
 const OUTGOING_QUEUE_SIZE: usize = 16;
 const INCOMING_QUEUE_SIZE: usize = 16;
@@ -44,6 +45,10 @@ pub enum NetError {
     ResourceUnavailable,
     InterfaceNotFound,
     ChecksumFailed,
+    NotConnected,
+    ConnectionReset,
+    AlreadyExists,
+    ConnectionRefused,
 }
 
 impl core::fmt::Display for NetError {
@@ -64,6 +69,10 @@ impl core::fmt::Display for NetError {
             NetError::ResourceUnavailable => write!(f, "resource unavailable"),
             NetError::InterfaceNotFound => write!(f, "interface not found"),
             NetError::ChecksumFailed => write!(f, "checksum verification failed"),
+            NetError::NotConnected => write!(f, "socket is not connected"),
+            NetError::ConnectionReset => write!(f, "connection reset"),
+            NetError::AlreadyExists => write!(f, "already exists"),
+            NetError::ConnectionRefused => write!(f, "connection refused"),
         }
     }
 }

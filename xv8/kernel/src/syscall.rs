@@ -45,6 +45,7 @@ pub enum SysError {
     NotEmpty = 39,
     NotATty = 25,
     MessageTooLarge = 90,
+    NotConnected = 128,
 }
 
 impl SysError {
@@ -116,6 +117,7 @@ impl Display for SysError {
             SysError::NotEmpty => write!(f, "directory not empty"),
             SysError::NotATty => write!(f, "not a tty"),
             SysError::MessageTooLarge => write!(f, "message too large"),
+            SysError::NotConnected => write!(f, "socket not connected"),
         }
     }
 }
@@ -154,6 +156,10 @@ impl From<NetError> for SysError {
             NetError::ResourceUnavailable => SysError::ResourceUnavailable,
             NetError::InterfaceNotFound => SysError::NoEntry,
             NetError::ChecksumFailed => SysError::InvalidArgument,
+            NetError::NotConnected => SysError::NotConnected,
+            NetError::ConnectionReset => SysError::NotConnected,
+            NetError::AlreadyExists => SysError::AlreadyExists,
+            NetError::ConnectionRefused => SysError::NotConnected,
         }
     }
 }
@@ -359,6 +365,13 @@ pub enum Syscall {
     Unsetenv = 105,
     Clearenv = 106,
     Getpagesize = 107,
+    TcpSocket = 108,
+    TcpBind = 109,
+    TcpListen = 110,
+    TcpAccept = 111,
+    TcpConnect = 112,
+    TcpSend = 113,
+    TcpRecv = 114,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -472,6 +485,13 @@ impl TryFrom<usize> for Syscall {
             105 => Ok(Syscall::Unsetenv),
             106 => Ok(Syscall::Clearenv),
             107 => Ok(Syscall::Getpagesize),
+            108 => Ok(Syscall::TcpSocket),
+            109 => Ok(Syscall::TcpBind),
+            110 => Ok(Syscall::TcpListen),
+            111 => Ok(Syscall::TcpAccept),
+            112 => Ok(Syscall::TcpConnect),
+            113 => Ok(Syscall::TcpSend),
+            114 => Ok(Syscall::TcpRecv),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -593,6 +613,13 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Unsetenv => sys_unsetenv(&args),
             Syscall::Clearenv => sys_clearenv(&args),
             Syscall::Getpagesize => sys_getpagesize(&args),
+            Syscall::TcpSocket => sys_tcp_socket(&args),
+            Syscall::TcpBind => sys_tcp_bind(&args),
+            Syscall::TcpListen => sys_tcp_listen(&args),
+            Syscall::TcpAccept => sys_tcp_accept(&args),
+            Syscall::TcpConnect => sys_tcp_connect(&args),
+            Syscall::TcpSend => sys_tcp_send(&args),
+            Syscall::TcpRecv => sys_tcp_recv(&args),
         },
         Err(e) => Err(e),
     };

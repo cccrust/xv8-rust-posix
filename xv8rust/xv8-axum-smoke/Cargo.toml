@@ -1,0 +1,11 @@
+[package]
+name = "xv8-axum-smoke"
+version = "0.1.0"
+edition = "2021"
+
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+std = { package = "xv8-user-std", path = "../xv8-user-std" }
+
+[target.'cfg(not(target_arch = "riscv64"))'.dependencies]
+axum = { path = "/Users/Shared/ccc/github/axum/axum", default-features = false, features = ["http1", "tokio"] }
+tokio = { path = "/Users/Shared/ccc/github/tokio/tokio", features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }

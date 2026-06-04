@@ -25,6 +25,9 @@ pub const NSOCKET: usize = 16;
 /// open ping sockets per system
 pub const NPING: usize = 16;
 
+/// open TCP sockets per system
+pub const NTCP: usize = 16;
+
 /// max exec arguments
 pub const MAXARG: usize = 32;
 

@@ -8,11 +8,11 @@ default = ["crossterm"]
 crossterm = ["dep:crossterm"]
 
 [dependencies]
-libc = { package = "xv8-libc-compat", path = "../../xv8_std/xv8-libc-compat" }
-crossterm = { package = "crossterm", path = "../../xv8_std/crossterm", optional = true }
+libc = { package = "xv8-libc-compat", path = "../../xv8rust/xv8-libc-compat" }
+crossterm = { package = "crossterm", path = "../../xv8rust/crossterm", optional = true }
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
-std = { package = "xv8-user-std", path = "../../xv8_std/xv8-user-std" }
+std = { package = "xv8-user-std", path = "../../xv8rust/xv8-user-std" }
 
 [[bin]]
 name = "echo"

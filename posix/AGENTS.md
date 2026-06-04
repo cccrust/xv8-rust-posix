@@ -6,42 +6,21 @@ A comprehensive collection of POSIX-compliant command-line utilities implemented
 
 ```
 posix/
-├── Cargo.toml          # Workspace manifest (members: libposix, tools)
+├── Cargo.toml          # Workspace manifest (members: ["tools"])
 ├── Cargo.lock
-├── libposix/          # Shared library crate
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs     # Module root
-│       ├── io.rs      # Read/Write trait definitions
-│       ├── fmt.rs     # Formatting utilities
-│       └── opt.rs     # Option parsing
-├── tools/             # Command-line utilities
+├── tools/             # Single crate with all 124 utilities
 │   ├── Cargo.toml
 │   ├── src/
-│   │   ├── lib.rs     # Library code
-│   │   ├── bin/        # 100+ binary implementations
+│   │   ├── lib.rs     # Shared library code (no libposix crate)
+│   │   ├── bin/        # 124 binary implementations
 │   │   │   ├── echo.rs, cat.rs, ls.rs, cp.rs, mv.rs, rm.rs...
 │   │   │   ├── sh.rs, grep.rs, sed.rs, awk.rs...
 │   │   │   ├── vi.rs, ed.rs, more.rs, less.rs...
 │   │   │   └── ... (many more)
 │   │   └── tests/
 │   │       └── basic.rs
+├── .cargo/config.toml  # riscv64 cross-compile config (stashed by test_posix_host.sh)
 └── _doc/              # Version history documentation
-    ├── v0.1.md - v0.19.md
-    ├── plan.md
-    └── todo.md, todo2.md
-```
-
-## Crates
-
-- **libposix** - Core library providing shared traits and utilities
-  - `io::Read`, `io::Write` trait definitions
-  - `fmt` - Formatting utilities
-  - `opt` - Option parsing
-
-- **tools** - Aggregated binary crate with 100+ utilities
-  - Uses `libposix` for shared functionality
-  - Depends on `libc` for system calls
 
 ## Test
 

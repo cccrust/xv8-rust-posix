@@ -2,10 +2,153 @@ use alloc::vec;
 
 use crate::file::{FILE_TABLE, File, FileType};
 use crate::net::Ipv4Addr;
+use crate::net::tcp::TcpTable;
 use crate::net::udp::{MAX_UDP_PAYLOAD, SocketTable};
 use crate::proc::{self, copy_from_user};
 use crate::syscall::{SysError, SyscallArgs};
 use crate::sysfile::fd_alloc;
+
+pub fn sys_tcp_socket(_args: &SyscallArgs) -> Result<usize, SysError> {
+    let tcp_id = try_log!(TcpTable::socket().map_err(SysError::from));
+
+    let (fd, file) = match log!(File::alloc()) {
+        Ok(mut file) => match log!(fd_alloc(file.clone())) {
+            Ok(fd) => (fd, file),
+            Err(e) => {
+                file.close();
+                return Err(e);
+            }
+        },
+        Err(e) => {
+            return Err(SysError::from(e));
+        }
+    };
+
+    let mut inner = FILE_TABLE.inner[file.id].lock();
+    inner.r#type = FileType::TcpSocket { tcp_id };
+
+    Ok(fd)
+}
+
+pub fn sys_tcp_bind(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let Ok(port) = u16::try_from(args.get_int(1)) else { err!(SysError::InvalidArgument) };
+
+    let tcp_id = {
+        let inner = FILE_TABLE.inner[file.id].lock();
+        let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
+        tcp_id
+    };
+
+    try_log!(TcpTable::bind(tcp_id, port).map_err(SysError::from));
+    Ok(0)
+}
+
+pub fn sys_tcp_listen(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+
+    let tcp_id = {
+        let inner = FILE_TABLE.inner[file.id].lock();
+        let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
+        tcp_id
+    };
+
+    try_log!(TcpTable::listen(tcp_id).map_err(SysError::from));
+    Ok(0)
+}
+
+pub fn sys_tcp_accept(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+
+    let tcp_id = {
+        let inner = FILE_TABLE.inner[file.id].lock();
+        let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
+        tcp_id
+    };
+
+    let child_id = try_log!(TcpTable::accept(tcp_id).map_err(SysError::from));
+
+    // allocate a new file descriptor for the child
+    let (fd, new_file) = match log!(File::alloc()) {
+        Ok(mut file) => match log!(fd_alloc(file.clone())) {
+            Ok(fd) => (fd, file),
+            Err(e) => {
+                file.close();
+                return Err(e);
+            }
+        },
+        Err(e) => {
+            return Err(SysError::from(e));
+        }
+    };
+
+    let mut inner = FILE_TABLE.inner[new_file.id].lock();
+    inner.r#type = FileType::TcpSocket { tcp_id: child_id };
+
+    Ok(fd)
+}
+
+pub fn sys_tcp_connect(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let dest_ip_ptr = args.get_addr(1);
+    let Ok(dest_port) = u16::try_from(args.get_int(2)) else { err!(SysError::InvalidArgument) };
+
+    let tcp_id = {
+        let inner = FILE_TABLE.inner[file.id].lock();
+        let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
+        tcp_id
+    };
+
+    let mut dest_ip = [0u8; 4];
+    if log!(copy_from_user(dest_ip_ptr, &mut dest_ip)).is_err() {
+        err!(SysError::BadAddress)
+    }
+    let dest_ip = Ipv4Addr(dest_ip);
+
+    try_log!(TcpTable::connect(tcp_id, dest_ip, dest_port).map_err(SysError::from));
+    Ok(0)
+}
+
+pub fn sys_tcp_send(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let buf_addr = args.get_addr(1);
+    let buf_len = args.get_int(2) as usize;
+
+    let tcp_id = {
+        let inner = FILE_TABLE.inner[file.id].lock();
+        let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
+        tcp_id
+    };
+
+    let mut payload = vec![0u8; buf_len];
+    if log!(copy_from_user(buf_addr, &mut payload)).is_err() {
+        err!(SysError::BadAddress)
+    }
+
+    try_log!(TcpTable::send(tcp_id, &payload).map_err(SysError::from));
+    Ok(buf_len)
+}
+
+pub fn sys_tcp_recv(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let buf_addr = args.get_addr(1);
+    let buf_len = args.get_int(2) as usize;
+
+    let tcp_id = {
+        let inner = FILE_TABLE.inner[file.id].lock();
+        let FileType::TcpSocket { tcp_id } = inner.r#type else { err!(SysError::InvalidArgument) };
+        tcp_id
+    };
+
+    let mut buf = vec![0u8; buf_len];
+    let n = try_log!(TcpTable::recv(tcp_id, &mut buf).map_err(SysError::from));
+
+    if log!(proc::copy_to_user(&buf[..n], buf_addr)).is_err() {
+        err!(SysError::BadAddress)
+    }
+
+    Ok(n)
+}
 
 /// Opens a new UDP socket and returns a file descriptor for it.
 ///
