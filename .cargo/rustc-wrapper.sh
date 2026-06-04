@@ -28,18 +28,29 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$target_triple" == "riscv64gc-unknown-none-elf" && "$source_file" == *"/src/bin/"*.rs ]]; then
+if [[ "$source_file" == *"/src/bin/"*.rs ]]; then
     temp_source=$(mktemp /tmp/rustc-wrapper.XXXXXX)
-    awk '
+
+    if [[ "$target_triple" == "riscv64gc-unknown-none-elf" ]]; then
+        awk '
         NR == 1 {
             print "#![cfg_attr(target_arch = \"riscv64\", no_main)]"
+            print "#![allow(dead_code, unused)]"
         }
         !main_injected && /^[[:space:]]*fn main[[:space:]]*\(/ {
             print "#[cfg_attr(target_arch = \"riscv64\", unsafe(no_mangle))]"
             main_injected = 1
         }
         { print }
-    ' "$source_file" > "$temp_source"
+        ' "$source_file" > "$temp_source"
+    else
+        awk '
+        NR == 1 {
+            print "#![allow(dead_code, unused)]"
+        }
+        { print }
+        ' "$source_file" > "$temp_source"
+    fi
 
     trap 'rm -f "$temp_source"' EXIT
 

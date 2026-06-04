@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![allow(dead_code, unused)]
 
 use core::future::Future;
 use core::pin::Pin;

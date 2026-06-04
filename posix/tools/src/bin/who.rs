@@ -4,7 +4,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let mut flag_q = false;
     let mut flag_h = false;
-    let mut flag_T = false;
+    let mut flag_t = false;
     let mut flag_u = false;
     let mut flag_b = false;
     let mut flag_r = false;
@@ -21,7 +21,7 @@ fn main() {
                     'H' => flag_h = true,
                     'q' => flag_q = true,
                     'r' => flag_r = true,
-                    'T' => flag_T = true,
+                    'T' => flag_t = true,
                     'u' => flag_u = true,
                     _ => { eprintln!("who: invalid option -- {}", c); std::process::exit(1); }
                 }
@@ -105,7 +105,7 @@ fn main() {
             }
 
             if flag_h {
-                if flag_T { println!("{:<8} {:<8} {:<12} {}", "NAME", "LINE", "TIME", "COMMENT"); }
+                if flag_t { println!("{:<8} {:<8} {:<12} {}", "NAME", "LINE", "TIME", "COMMENT"); }
                 else { println!("{:<8} {:<12} {}", "NAME", "LINE", "TIME"); }
             }
 
@@ -118,7 +118,7 @@ fn main() {
                     let user = CStr::from_ptr(ut.ut_user.as_ptr()).to_string_lossy();
                     let line = CStr::from_ptr(ut.ut_line.as_ptr()).to_string_lossy();
                     if flag_a || (ut.ut_type == libc::USER_PROCESS && !user.is_empty()) {
-                        let status = if flag_T {
+                        let status = if flag_t {
                             format!(" {}", if ut.ut_type == libc::USER_PROCESS { "+" } else { "-" })
                         } else { String::new() };
                         let idle = if flag_u {

@@ -31,3 +31,6 @@ rustix = { version = "0.38", features = ["termios", "fs", "stdio"], default-feat
 mio = { version = "1.0", features = ["os-poll"], optional = true }
 signal-hook = { version = "0.3.17", optional = true }
 signal-hook-mio = { version = "0.2.4", features = ["support-v1_0"], optional = true }
+
+[lints.rust]
+unexpected_cfgs = { level = "allow" }

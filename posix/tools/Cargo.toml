@@ -621,3 +621,8 @@ path = "src/bin/rev.rs"
 [[bin]]
 name = "col"
 path = "src/bin/col.rs"
+
+[lints.rust]
+unexpected_cfgs = { level = "allow" }
+
+
