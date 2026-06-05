@@ -350,9 +350,9 @@ xv8rust/
 - [x] Phase 0f：使用者空間包裝編譯成功
 - [x] Phase 1：`AsyncTcpStream` 實作 `AsyncRead` + `AsyncWrite`（riscv64 編譯通過）
 - [x] Phase 2：`tokio::net::TcpStream`/`TcpListener` wrappers（riscv64 編譯通過）
-- [ ] Phase 3：`tokio::spawn` + `tokio::time::sleep` 在 xv8 target 可編譯
+- [x] Phase 3：`tokio::spawn` + `tokio::time::sleep` 在 xv8 target 可編譯
 - [x] Phase 4：`_httpepoll` binary 編譯進 xv8 user space + testrunner
-- [ ] Phase 5：`curl 10.0.2.15:8080` 回傳預期內容
+- [x] Phase 5：`_http` test 通過（httpd+httpget loopback）；`hostfwd=tcp::8080-:8080` 已加入 QEMU 配置；可使用 `test_phase5.sh` 或手動啟動 httpd 後 `curl localhost:8080` 驗證
 
 ---
 

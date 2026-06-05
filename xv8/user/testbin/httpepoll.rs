@@ -87,7 +87,7 @@ fn main(_args: Args) {
                 }
             }
         }
-        parent_pid => {
+        _parent_pid => {
             println!("  parent: nanosleep + connect");
             let _ = nanosleep(0, 200_000_000);
             // Parent: connect and send 2 requests

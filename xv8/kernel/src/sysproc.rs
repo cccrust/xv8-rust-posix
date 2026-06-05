@@ -451,9 +451,9 @@ pub fn sys_nanosleep(args: &SyscallArgs) -> Result<usize, SysError> {
     }
 
     let sec = u64::from_le_bytes([buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]]);
-    let _nsec = u64::from_le_bytes([buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15]]);
+    let nsec = u64::from_le_bytes([buf[8], buf[9], buf[10], buf[11], buf[12], buf[13], buf[14], buf[15]]);
 
-    let total_ticks = (sec * 100) as usize;
+    let total_ticks = (sec * 100) as usize + (nsec / 10_000_000) as usize;
 
     let mut ticks = TICKS.lock();
     let ticks0 = *ticks;

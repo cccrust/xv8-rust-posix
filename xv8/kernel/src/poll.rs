@@ -123,7 +123,7 @@ fn fd_readiness(fd: usize) -> (bool, bool) {
 fn find_tcp_id(fd: usize) -> Option<usize> {
     let (_proc, data) = proc::current_proc_and_data_mut();
     let file = data.open_files[fd].as_ref()?.clone();
-    drop(data);
+    let _ = data;
     let inner = FILE_TABLE.inner[file.id].lock();
     match &inner.r#type {
         FileType::TcpSocket { tcp_id } => Some(*tcp_id),
@@ -362,10 +362,7 @@ pub fn epoll_notify_instances(epfd: usize, events: u32) {
         let waiting = instance.waiting;
         drop(table);
         if waiting {
-            println!("epoll_notify: wakeup epfd={}", epfd);
             proc::wakeup(Channel::Epoll(epfd));
-        } else {
-            println!("epoll_notify: nobody waiting epfd={}", epfd);
         }
     }
 }
