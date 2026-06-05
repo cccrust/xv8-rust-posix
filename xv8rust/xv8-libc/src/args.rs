@@ -1,5 +1,14 @@
-use core::arch::asm;
 use core::slice;
+
+static mut ARGC: usize = 0;
+static mut ARGV: *const *const u8 = core::ptr::null();
+
+pub fn init(argc: usize, argv: *const *const u8) {
+    unsafe {
+        ARGC = argc;
+        ARGV = argv;
+    }
+}
 
 pub struct Args {
     pub argc: usize,
@@ -15,17 +24,7 @@ pub struct ArgsIter {
 impl Args {
     #[inline(always)]
     pub unsafe fn from_stack() -> Self {
-        let argc: usize;
-        let argv: *const *const u8;
-        unsafe {
-            asm!(
-                "mv {0}, a0",
-                "mv {1}, a1",
-                out(reg) argc,
-                out(reg) argv,
-            )
-        };
-        Self { argc, argv }
+        Self { argc: ARGC, argv: ARGV }
     }
 
     pub fn len(&self) -> usize {

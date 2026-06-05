@@ -57,8 +57,7 @@ fn lang_start<T: Termination + 'static>(
 #[unsafe(no_mangle)]
 #[unsafe(link_section = ".text.entry")]
 pub extern "C" fn _start(argc: isize, argv: *const *const u8) -> ! {
-    let _ = argc;
-    let _ = argv;
+    xv8_libc::args::init(argc as usize, argv);
     lang_start(safe_main, argc, argv, 0);
     xv8_libc::exit(0)
 }

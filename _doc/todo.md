@@ -106,7 +106,8 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 | v2.2 | xv8rust/net bridge + 網路工具移植 ✅ | v2.1 |
 | v2.3 | HTTP 支援（httpd + httpget）✅ | v2.2 |
 | v2.4 | Async Runtime（`block_on` + `Sleep`）✅ | v2.3 |
+| v2.5 | Kernel epoll + async I/O + tokio compat ✅ | v2.4 |
+| v2.6 | POSIX shell 整合 xv8 + fix argv 傳遞 ✅ | v2.5 |
 
 ### Next
-- v2.5: Richer async runtime (`xv8-async` crate) with proper waker scheduling, spawn, timer reactor
-- v2.5+: xv8-axum-smoke with tokio+axum patched for xv8 target
+- v2.7: Shell bugs fix (`elif`, empty-string args, `test = ""`, single-quote expansion)

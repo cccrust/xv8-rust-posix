@@ -22,7 +22,7 @@ qemu-img create target/fs.img 256M
 
 # Pass test binaries and the testmode marker as extra files to mkfs.sh.
 # shellcheck disable=SC2086
-./mkfs.sh $test_bins /tmp/testmode
+./mkfs.sh $test_bins /tmp/testmode shtest.sh
 
 if ! cargo run --release; then
   echo "test failed"

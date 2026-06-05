@@ -36,4 +36,5 @@ cargo run \
   $net_bins \
   $user_bins \
   LICENSE \
+  shtest.sh \
   "$@"
