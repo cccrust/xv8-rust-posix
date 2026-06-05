@@ -28,31 +28,27 @@ for arg in "$@"; do
     esac
 done
 
-if [[ "$source_file" == *"/src/bin/"*.rs ]]; then
-    temp_source=$(mktemp /tmp/rustc-wrapper.XXXXXX)
+# Only modify source files for riscv64 cross-compilation.
+# Host builds pass through unchanged.
+if [[ "$target_triple" == "riscv64gc-unknown-none-elf" ]] && [[ "$source_file" == *"/src/bin/"*.rs ]]; then
+    base_src=$(basename "$source_file")
+    temp_dir="/tmp/rustc-wrapper-$$"
+    mkdir -p "$temp_dir"
+    temp_source="$temp_dir/$base_src"
 
-    if [[ "$target_triple" == "riscv64gc-unknown-none-elf" ]]; then
-        awk '
-        NR == 1 {
-            print "#![cfg_attr(target_arch = \"riscv64\", no_main)]"
-            print "#![allow(dead_code, unused)]"
-        }
-        !main_injected && /^[[:space:]]*fn main[[:space:]]*\(/ {
-            print "#[cfg_attr(target_arch = \"riscv64\", unsafe(no_mangle))]"
-            main_injected = 1
-        }
-        { print }
-        ' "$source_file" > "$temp_source"
-    else
-        awk '
-        NR == 1 {
-            print "#![allow(dead_code, unused)]"
-        }
-        { print }
-        ' "$source_file" > "$temp_source"
-    fi
+    awk '
+    NR == 1 {
+        print "#![cfg_attr(target_arch = \"riscv64\", no_main)]"
+        print "#![allow(dead_code, unused)]"
+    }
+    !main_injected && /^[[:space:]]*fn main[[:space:]]*\(/ {
+        print "#[cfg_attr(target_arch = \"riscv64\", unsafe(no_mangle))]"
+        main_injected = 1
+    }
+    { print }
+    ' "$source_file" > "$temp_source"
 
-    trap 'rm -f "$temp_source"' EXIT
+    trap 'rm -rf "$temp_dir"' EXIT
 
     rewritten_args=()
     for arg in "$@"; do
