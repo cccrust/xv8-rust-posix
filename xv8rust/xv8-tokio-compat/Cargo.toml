@@ -1,0 +1,13 @@
+[package]
+name = "xv8-tokio-compat"
+version = "0.1.0"
+edition = "2021"
+
+# riscv64 only — host testing uses real tokio directly
+[target.'cfg(target_arch = "riscv64")'.dependencies]
+xv8-async = { path = "../xv8-async" }
+xv8-user-std = { path = "../xv8-user-std" }
+xv8-libc = { path = "../xv8-libc" }
+
+[features]
+default = []

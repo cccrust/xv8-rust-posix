@@ -661,6 +661,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "xv8-tokio-compat"
+version = "0.1.0"
+dependencies = [
+ "xv8-async",
+ "xv8-libc",
+]
+
+[[package]]
 name = "xv8-user-std"
 version = "0.1.0"
 dependencies = [
