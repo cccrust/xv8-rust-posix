@@ -14,6 +14,7 @@ crossterm = { package = "crossterm", path = "../../xv8rust/crossterm", optional 
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 std = { package = "xv8-user-std", path = "../../xv8rust/xv8-user-std" }
+xv8-libc = { path = "../../xv8rust/xv8-libc" }
 
 [[bin]]
 name = "echo"

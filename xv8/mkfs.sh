@@ -14,8 +14,7 @@ posix_bins=$(find ../posix/target/riscv64gc-unknown-none-elf/release -maxdepth 1
 net_bins=$(find ../net/target/riscv64gc-unknown-none-elf/release -maxdepth 1 -type f -perm -u+x | sort)
 
 # Add only necessary xv8 binaries that don't conflict with posix
-# init, poweroff, demo, primes, udp, uptime, zombie are unique to xv8
-# We use full path so mkfs adds them with correct names (/init, /poweroff, etc.)
+# init, poweroff, demo, primes, udp, uptime, zombie, tcp_echo are unique to xv8
 user_bins="
 target/riscv64gc-unknown-none-elf/release/demo
 target/riscv64gc-unknown-none-elf/release/init

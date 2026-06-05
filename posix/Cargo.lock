@@ -190,6 +190,7 @@ name = "tools"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "xv8-libc",
  "xv8-libc-compat",
  "xv8-user-std",
 ]

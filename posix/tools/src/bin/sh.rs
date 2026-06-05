@@ -1863,6 +1863,7 @@ fn apply_redirects(cmd: &mut Command, redirects: &[Redirect], _ctx: &mut ShellCo
 // ─── Pipeline execution ──────────────────────────────────────────────────────
 
 // ─── Apply redirects for builtins (fd-level) ─────────────────────────────────
+// Two platform-specific implementations (unix vs riscv64), mutually exclusive cfgs.
 
 #[cfg(unix)]
 fn apply_redirects_builtin(redirects: &[Redirect]) -> Vec<(i32, i32)> {
@@ -1911,6 +1912,61 @@ fn restore_fds(saved: Vec<(i32, i32)>) {
         if old_fd >= 0 {
             unsafe { libc::dup2(old_fd, fd); }
             unsafe { libc::close(old_fd); }
+        }
+    }
+}
+
+#[cfg(target_arch = "riscv64")]
+fn apply_redirects_builtin(redirects: &[Redirect]) -> Vec<(i32, i32)> {
+    use xv8_libc::{OpenFlag, dup, dup2, close, open};
+    use std::ffi::CString;
+    let mut saved: Vec<(i32, i32)> = Vec::new();
+    for r in redirects {
+        match r.op.as_str() {
+            ">" | ">>" => {
+                if r.fd != 1 && r.fd != 2 { continue; }
+                let flags = if r.op == ">>" {
+                    OpenFlag::WRITE_ONLY | OpenFlag::CREATE | OpenFlag::APPEND
+                } else {
+                    OpenFlag::WRITE_ONLY | OpenFlag::CREATE | OpenFlag::TRUNCATE
+                };
+                let cpath = CString::new(r.target.as_str()).unwrap();
+                let new_fd = unsafe { open(cpath.as_ptr() as *const u8, flags) };
+                if new_fd >= 0 {
+                    let target_fd = r.fd as i32;
+                    let old = unsafe { dup(target_fd as usize) } as i32;
+                    unsafe { dup2(new_fd as usize, target_fd as usize); }
+                    unsafe { close(new_fd as usize); }
+                    saved.push((target_fd, old));
+                } else {
+                    eprintln!("sh: cannot create '{}'", r.target);
+                }
+            }
+            "<" => {
+                if r.fd != 0 { continue; }
+                let cpath = CString::new(r.target.as_str()).unwrap();
+                let new_fd = unsafe { open(cpath.as_ptr() as *const u8, OpenFlag::READ_ONLY) };
+                if new_fd >= 0 {
+                    let target_fd = r.fd as i32;
+                    let old = unsafe { dup(target_fd as usize) } as i32;
+                    unsafe { dup2(new_fd as usize, target_fd as usize); }
+                    unsafe { close(new_fd as usize); }
+                    saved.push((target_fd, old));
+                }
+            }
+            _ => {}
+        }
+    }
+    saved
+}
+
+#[cfg(target_arch = "riscv64")]
+fn restore_fds(saved: Vec<(i32, i32)>) {
+    use xv8_libc::{dup2, close};
+    for (fd, old_fd) in saved {
+        if old_fd >= 0 {
+            unsafe { dup2(old_fd as usize, fd as usize); }
+            unsafe { close(old_fd as usize); }
         }
     }
 }
@@ -2875,13 +2931,13 @@ fn execute_sequence(tokens: &[String], ctx: &mut ShellContext) -> i32 {
     let cmd_args: Vec<String> = argv[cmd_start + 1..].to_vec();
 
     // Apply redirects for builtins/functions (fd-level)
-    #[cfg(unix)]
+    #[cfg(any(unix, target_arch = "riscv64"))]
     let saved_fds: Vec<(i32, i32)> = if !redirects.is_empty() {
         apply_redirects_builtin(&redirects)
     } else {
         Vec::new()
     };
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, target_arch = "riscv64")))]
     let saved_fds: Vec<(i32, i32)> = Vec::new();
 
     // Check for function call
@@ -2901,18 +2957,18 @@ fn execute_sequence(tokens: &[String], ctx: &mut ShellContext) -> i32 {
         ctx.func_depth -= 1;
         ctx.positional = prev_positional;
         ctx.last_status = last_status;
-        #[cfg(unix)]
+        #[cfg(any(unix, target_arch = "riscv64"))]
         restore_fds(saved_fds);
         return last_status;
     }
 
     if let Some(status) = exec_builtin(cmd, &cmd_args, &redirects, ctx) {
-        #[cfg(unix)]
+        #[cfg(any(unix, target_arch = "riscv64"))]
         restore_fds(saved_fds);
         ctx.last_status = status;
         return status;
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, target_arch = "riscv64"))]
     restore_fds(saved_fds);
 
     let status = execute_cmd(&argv, &redirects, false, ctx);
