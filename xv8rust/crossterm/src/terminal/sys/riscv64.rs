@@ -19,7 +19,7 @@ pub(crate) fn enable_raw_mode() -> io::Result<()> {
         return Ok(());
     }
     let fd = 0;
-    let ret = unsafe { xv8_libc::ioctl(fd, xv8_libc::IoctlCmd::CONSOLE_SET_RAW, 1) };
+    let ret = xv8_libc::ioctl(fd, xv8_libc::IoctlCmd::CONSOLE_SET_RAW, 1);
     if ret < 0 {
         return Err(io::Error::last_os_error());
     }
@@ -31,7 +31,7 @@ pub(crate) fn disable_raw_mode() -> io::Result<()> {
     let mut raw = TERMINAL_MODE_PRIOR_RAW.lock();
     if let true = *raw {
         let fd = 0;
-        let ret = unsafe { xv8_libc::ioctl(fd, xv8_libc::IoctlCmd::CONSOLE_SET_RAW, 0) };
+        let ret = xv8_libc::ioctl(fd, xv8_libc::IoctlCmd::CONSOLE_SET_RAW, 0);
         if ret < 0 {
             return Err(io::Error::last_os_error());
         }

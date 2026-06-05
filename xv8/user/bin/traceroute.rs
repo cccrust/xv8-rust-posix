@@ -5,7 +5,7 @@ use user::*;
 
 const MAX_HOPS: u32 = 30;
 const BASE_PORT: u16 = 33434;
-const TIMEOUT_TICKS: usize = 50; // 500ms assuming 10ms ticks
+const _TIMEOUT_TICKS: usize = 50; // 500ms assuming 10ms ticks
 const MAX_BUFFER_SIZE: usize = 512;
 
 /// Simple IPv4 address and port for destination.
@@ -98,7 +98,7 @@ fn main(args: Args) {
 
         while waited < timeout_ticks {
             match receive(socket_fd, &mut buf, &mut src_ip, &mut src_port) {
-                Ok(len) => {
+                Ok(_len) => {
                     // We received a packet
                     let elapsed = (uptime() - start) * 10; // convert ticks to ms
                     println!("{:<2} {}.{}.{}.{}  {}ms", ttl, src_ip[0], src_ip[1], src_ip[2], src_ip[3], elapsed);

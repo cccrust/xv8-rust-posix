@@ -58,6 +58,6 @@ impl<S: AsRawHandle> IsTty for S {
 impl<S: std::os::unix::io::AsRawFd> IsTty for S {
     fn is_tty(&self) -> bool {
         let fd = self.as_raw_fd() as usize;
-        unsafe { xv8_libc::isatty(fd) == 1 }
+        xv8_libc::isatty(fd) == 1
     }
 }
