@@ -11,7 +11,7 @@ posix/
 ├── tools/             # Single crate with all 124 utilities
 │   ├── Cargo.toml
 │   ├── src/
-│   │   ├── lib.rs     # Shared library code (no libposix crate)
+│   │   ├── lib.rs     # Shared library code
 │   │   ├── bin/        # 124 binary implementations
 │   │   │   ├── echo.rs, cat.rs, ls.rs, cp.rs, mv.rs, rm.rs...
 │   │   │   ├── sh.rs, grep.rs, sed.rs, awk.rs...
@@ -19,7 +19,7 @@ posix/
 │   │   │   └── ... (many more)
 │   │   └── tests/
 │   │       └── basic.rs
-├── .cargo/config.toml  # riscv64 cross-compile config (stashed by test_posix_host.sh)
+├── .cargo/config.toml  # riscv64 cross-compile config (stashed for host builds)
 └── _doc/              # Version history documentation
 
 ## Test
@@ -29,10 +29,12 @@ posix/
 ./test.sh
 
 # Or run individually:
-sh tools/tests/test_sh_basic.sh
-sh tools/tests/test_tools_core.sh
+sh tools/tests/test_sh_basic.sh      # 33 shell tests
+sh tools/tests/test_tools_core.sh    # 21 core tool tests
+sh tools/tests/test_v2.0.sh          # v2.0 tools (rev, col, look, who, users, last)
 
-# Both suites: PASS: 33/33 (shell) + PASS: 21/21 (core tools)
+# Rust integration test
+cargo test --release
 ```
 
 ## Build
@@ -41,9 +43,8 @@ sh tools/tests/test_tools_core.sh
 # Build entire workspace
 cargo build --release
 
-# Build specific crate
-cargo build -p libposix
-cargo build -p tools
+# Build the tools crate (only member)
+cargo build -p tools --release
 ```
 
 ## Features

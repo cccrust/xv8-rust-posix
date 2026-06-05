@@ -7,6 +7,7 @@ use xv8_user_std::os::unix::io::AsRawFd;
 
 use crate::reactor;
 
+#[derive(Debug)]
 pub struct AsyncTcpStream {
     fd: usize,
     peer: SocketAddr,
@@ -85,6 +86,7 @@ impl Drop for AsyncTcpStream {
     }
 }
 
+#[derive(Debug)]
 pub struct AsyncTcpListener {
     fd: usize,
     addr: SocketAddr,
@@ -117,7 +119,7 @@ impl AsyncTcpListener {
         Ok(Self { fd, addr })
     }
 
-    pub fn poll_accept(self: Pin<&mut Self>, cx: &Context) -> Poll<Result<(AsyncTcpStream, SocketAddr), Error>> {
+    pub fn poll_accept(self: Pin<&Self>, cx: &Context) -> Poll<Result<(AsyncTcpStream, SocketAddr), Error>> {
         let ret = xv8_libc::tcp_accept(self.fd);
         if ret >= 0 {
             let child_fd = ret as usize;

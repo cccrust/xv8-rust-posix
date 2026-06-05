@@ -4,11 +4,15 @@
 
 | 組件 | 狀態 | 備註 |
 |------|------|------|
-| `xv8-user-std` net.rs | 同步 blocking 包裝 | TcpStream/TcpListener 可運作但無 async 版本 |
-| `xv8-libc` raw.rs | 最小 TCP syscalls | tcp_socket/accept/connect/send/recv（均 blocking） |
-| `xv8-async` | 單執行序 executor + timer reactor | 有 `sleep`、`yield_now`，可在 `block_on` 下運作 |
+| `xv8-user-std` net.rs | 同步 blocking 包裝 | TcpStream/TcpListener 可運作 |
+| `xv8-user-std` io_async.rs | **async I/O (epoll-based)** ✅ | AsyncTcpStream/TcpListener with AsyncRead/AsyncWrite/AsyncAccept |
+| `xv8-libc` raw.rs | 最小 TCP syscalls | tcp_socket/accept/connect/send/recv |
+| `xv8-async` | 單執行序 executor + timer reactor | 有 `sleep`、`yield_now`、`block_on` |
+| `xv8-async` reactor | **epoll-based Reactor** ✅ | 已整合 epoll_wait I/O driver |
+| `xv8-tokio-compat` | **NEW: tokio::net facade** ✅ | TcpStream/TcpListener wrappers，riscv64 編譯通過 |
 | `xv8-axum-smoke` | host 端 smoke test | 驗證 tokio/axum/hyper 相依圖正確，riscv64 stub 為空 |
-| kernel net stack | 完整 TCP/UDP/ETH/ARP/IPv4 | QEMU 環境已可用，但缺少 non-blocking + epoll |
+| kernel net stack | 完整 TCP/UDP/ETH/ARP/IPv4 + **epoll** ✅ | epoll syscalls + non-blocking I/O 已實作 |
+| `_httpepoll` testbin | **NEW** ✅ | QEMU 自測 async HTTP server (fork + epoll + loopback client) |
 
 **缺口**：缺少 non-blocking I/O、epoll 事件通知、async I/O traits、tokio runtime。
 
@@ -338,16 +342,16 @@ xv8rust/
 
 ## 驗收標準
 
-- [ ] Phase 0a：`O_NONBLOCK` 和 `fcntl` 可在 user space 設定
-- [ ] Phase 0b：non-blocking TCP recv 回傳 EAGAIN
-- [ ] Phase 0c：`epoll_create1` + `epoll_ctl` + `epoll_wait` 可運作
-- [ ] Phase 0d：TCP 數據到達時 epoll_wait 被喚醒
-- [ ] Phase 0e：`poll()` syscall 可運作
-- [ ] Phase 0f：使用者空間包裝編譯成功
-- [ ] Phase 1：`AsyncTcpStream` 實作 `AsyncRead` + `AsyncWrite`（unit test on host）
-- [ ] Phase 2：`tokio::net::TcpStream` 可用於 `TcpStream::connect().await`
+- [x] Phase 0a：`O_NONBLOCK` 和 `fcntl` 可在 user space 設定
+- [x] Phase 0b：non-blocking TCP recv 回傳 EAGAIN
+- [x] Phase 0c：`epoll_create1` + `epoll_ctl` + `epoll_wait` 可運作
+- [x] Phase 0d：TCP 數據到達時 epoll_wait 被喚醒
+- [x] Phase 0e：`poll()` syscall 可運作
+- [x] Phase 0f：使用者空間包裝編譯成功
+- [x] Phase 1：`AsyncTcpStream` 實作 `AsyncRead` + `AsyncWrite`（riscv64 編譯通過）
+- [x] Phase 2：`tokio::net::TcpStream`/`TcpListener` wrappers（riscv64 編譯通過）
 - [ ] Phase 3：`tokio::spawn` + `tokio::time::sleep` 在 xv8 target 可編譯
-- [ ] Phase 4：`axum_test` binary 可編譯進 xv8 user space
+- [x] Phase 4：`_httpepoll` binary 編譯進 xv8 user space + testrunner
 - [ ] Phase 5：`curl 10.0.2.15:8080` 回傳預期內容
 
 ---

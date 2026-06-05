@@ -1,6 +1,3 @@
 [workspace]
 resolver = "3"
-members = ["xv8-libc", "xv8-user-std", "xv8-net", "xv8-async", "xv8-axum-smoke", "xv8-tokio-compat", "crossterm"]
-
-[patch.crates-io]
-tokio = { path = "/Users/Shared/ccc/github/tokio/tokio" }
+members = ["xv8-libc", "xv8-user-std", "xv8-net", "xv8-async", "xv8-tokio-compat", "crossterm"]

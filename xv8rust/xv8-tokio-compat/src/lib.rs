@@ -4,10 +4,11 @@ use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
 use xv8_async::io_async::{AsyncTcpStream as InnerStream, AsyncTcpListener as InnerListener};
-use xv8_user_std::io::{Error, ErrorKind, Result};
+use xv8_user_std::io::{ErrorKind, Result};
 use xv8_user_std::net::SocketAddr;
 
-pub use xv8_async::io_async;
+pub mod runtime;
+pub mod time;
 
 #[derive(Debug)]
 pub struct TcpStream(InnerStream);
@@ -93,7 +94,7 @@ impl TcpListener {
             type Output = Result<(InnerStream, SocketAddr)>;
 
             fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(InnerStream, SocketAddr)>> {
-                Pin::new(&mut *self.0).poll_accept(cx)
+                Pin::new(self.0).poll_accept(cx)
             }
         }
 
@@ -106,11 +107,9 @@ impl TcpListener {
     }
 
     pub fn poll_accept(&self, cx: &mut Context<'_>) -> Poll<Result<(TcpStream, SocketAddr)>> {
-        match Pin::new(&mut *self.0).poll_accept(cx) {
-            Poll::Ready(Ok((s, a))) => Poll::Ready(Ok((TcpStream(s), a))),
-            Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
-            Poll::Pending => Poll::Pending,
-        }
+        Pin::new(&self.0).poll_accept(cx).map(|r| {
+            r.map(|(s, a)| (TcpStream(s), a))
+        })
     }
 }
 

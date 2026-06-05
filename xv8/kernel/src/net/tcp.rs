@@ -347,8 +347,18 @@ impl TcpTable {
 pub fn tcp_readiness(id: usize) -> (bool, bool) {
     let table = TCP_TABLE.lock();
     let Some(ref entry) = table.entries[id] else { return (false, false) };
+    if matches!(entry.state, TcpState::Listen) {
+        let ready = !entry.backlog.is_empty();
+        if ready {
+            println!("tcp_readiness: Listen backlog={}", entry.backlog.len());
+        }
+        return (ready, false);
+    }
     let readable = entry.recv_ready && !entry.recv_buf.is_empty();
     let writable = matches!(entry.state, TcpState::Established);
+    if readable {
+        println!("tcp_readiness: conn={} recv_ready={} recv_buf={}", id, entry.recv_ready, entry.recv_buf.len());
+    }
     (readable, writable)
 }
 
@@ -487,6 +497,8 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
             let conn = table.entries[conn_id].as_mut().unwrap();
             if !data.is_empty() {
                 if conn.recv_buf.len() + data.len() <= 65536 {
+                    println!("handle_tcp: data for conn={}, len={}, recv_buf={}",
+                        conn_id, data.len(), conn.recv_buf.len());
                     conn.recv_buf.extend_from_slice(data);
                     conn.recv_seq = seq.wrapping_add(data.len() as u32);
                     conn.recv_ready = true;

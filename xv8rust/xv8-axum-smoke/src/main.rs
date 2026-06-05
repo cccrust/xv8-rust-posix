@@ -1,5 +1,16 @@
 #[cfg(target_arch = "riscv64")]
-fn main() {}
+fn main() {
+    // Compile-time verification that xv8-tokio-compat types are accessible.
+    // Full runtime testing is done by the _httpepoll testbin in xv8 QEMU.
+    use xv8_tokio_compat::{TcpListener, TcpStream};
+    use xv8_tokio_compat::runtime::Runtime;
+    fn _assert_kinds() {
+        fn _assert_send<T: Send>() {}
+        _assert_send::<TcpStream>();
+        _assert_send::<TcpListener>();
+        _assert_send::<Runtime>();
+    }
+}
 
 #[cfg(not(target_arch = "riscv64"))]
 use axum::{routing::get, Router};

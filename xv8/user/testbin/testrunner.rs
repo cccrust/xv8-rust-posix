@@ -4,7 +4,7 @@
 use user::*;
 
 const TESTS: &[&str] = &[
-    "/_fs", "/_pipe", "/_proc", "/_fd", "/_sbrk", "/_cow", "/_net", "/_syscall", "/_neteth", "/_netdns", "/_tcpecho", "/_nettools", "/_http", "/_async",
+    "/_fs", "/_pipe", "/_proc", "/_fd", "/_sbrk", "/_cow", "/_net", "/_syscall", "/_neteth", "/_netdns", "/_tcpecho", "/_nettools", "/_http", "/_async", "/_httpepoll",
 ];
 
 #[unsafe(no_mangle)]

@@ -342,21 +342,11 @@ pub fn sys_epoll_wait(args: &SyscallArgs) -> Result<usize, SysError> {
             inst.waiting = false;
 
             if !inst.triggered.is_empty() {
-                let n = inst.triggered.len().min(max_events);
-                let ready_events: Vec<EpollEvent> = inst.triggered.drain(..n).collect();
-                drop(table);
-                let (_proc, data) = proc::current_proc_and_data_mut();
-                let pt = data.pagetable_mut();
-                let events_bytes = unsafe {
-                    core::slice::from_raw_parts(
-                        ready_events.as_ptr() as *const u8,
-                        n * size_of::<EpollEvent>(),
-                    )
-                };
-                if pt.copy_to(events_bytes, events_addr).is_err() {
-                    err!(SysError::BadAddress);
-                }
-                return Ok(n);
+                // Clear triggered events and fall through to loop back.
+                // fd_readiness will report the correct events with proper
+                // entry.data (the triggered events have data=0 which would
+                // confuse userspace).
+                inst.triggered.clear();
             }
         };
     }
@@ -369,7 +359,13 @@ pub fn epoll_notify_instances(epfd: usize, events: u32) {
             events,
             data: 0,
         });
+        let waiting = instance.waiting;
         drop(table);
-        proc::wakeup(Channel::Epoll(epfd));
+        if waiting {
+            println!("epoll_notify: wakeup epfd={}", epfd);
+            proc::wakeup(Channel::Epoll(epfd));
+        } else {
+            println!("epoll_notify: nobody waiting epfd={}", epfd);
+        }
     }
 }

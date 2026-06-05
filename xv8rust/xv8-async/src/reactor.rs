@@ -1,5 +1,3 @@
-use alloc::collections::VecDeque;
-use alloc::vec::Vec;
 use core::task::Waker;
 use xv8_libc;
 use xv8_user_std::collections::HashMap;
@@ -14,7 +12,6 @@ static REACTOR: Mutex<Option<ReactorInner>> = Mutex::new(None);
 struct ReactorInner {
     epoll_fd: usize,
     wakers: HashMap<usize, Waker>,
-    pending_register: VecDeque<(usize, u32, Waker)>,
 }
 
 pub fn init() -> Option<usize> {
@@ -26,7 +23,6 @@ pub fn init() -> Option<usize> {
     *lock(&REACTOR) = Some(ReactorInner {
         epoll_fd,
         wakers: HashMap::new(),
-        pending_register: VecDeque::new(),
     });
     Some(epoll_fd)
 }

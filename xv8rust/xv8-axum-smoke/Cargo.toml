@@ -5,6 +5,7 @@ edition = "2021"
 
 [target.'cfg(target_arch = "riscv64")'.dependencies]
 std = { package = "xv8-user-std", path = "../xv8-user-std" }
+xv8-tokio-compat = { path = "../xv8-tokio-compat" }
 
 [target.'cfg(not(target_arch = "riscv64"))'.dependencies]
 axum = { path = "/Users/Shared/ccc/github/axum/axum", default-features = false, features = ["http1", "tokio"] }
