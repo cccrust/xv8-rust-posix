@@ -168,12 +168,14 @@ fn tokenize(input: &str) -> Vec<String> {
         }
         // Single quote
         if c == '\'' && !in_dquote {
+            current.push(c);
             in_quote = !in_quote;
             i += 1;
             continue;
         }
         // Double quote
         if c == '"' && !in_quote {
+            current.push(c);
             in_dquote = !in_dquote;
             i += 1;
             continue;
@@ -429,14 +431,23 @@ fn expand_vars(s: &str, ctx: &mut ShellContext) -> String {
             // Double-quoted string: expand vars
             let mut j = i + 1;
             let mut inner = String::new();
-            while j < chars.len() && chars[j] != '"' {
-                if chars[j] == '\\' && j + 1 < chars.len() {
+            let mut cmdsub_depth = 0;
+            while j < chars.len() {
+                if cmdsub_depth == 0 && chars[j] == '"' {
+                    break;
+                }
+                if chars[j] == '\\' && j + 1 < chars.len() && cmdsub_depth == 0 {
                     let next = chars[j + 1];
                     if next == '\\' || next == '"' || next == '$' {
                         inner.push(next);
                         j += 2;
                         continue;
                     }
+                }
+                if chars[j] == '$' && j + 1 < chars.len() && chars[j + 1] == '(' {
+                    cmdsub_depth += 1;
+                } else if chars[j] == ')' && cmdsub_depth > 0 {
+                    cmdsub_depth -= 1;
                 }
                 inner.push(chars[j]);
                 j += 1;
@@ -1585,7 +1596,6 @@ fn which_external(name: &str) -> Result<String, ()> {
 // ─── Test builtin ────────────────────────────────────────────────────────────
 
 fn exec_test(args: &[&str]) -> bool {
-    let args: Vec<&str> = args.iter().filter(|a| !a.is_empty()).copied().collect();
     let argc = args.len();
     if args.last() == Some(&"]") {
         return exec_test(&args[..argc - 1]);
@@ -2450,7 +2460,7 @@ fn parse_and_exec(tokens: &[String], ctx: &mut ShellContext) -> i32 {
     let first = tokens[0].as_str();
 
     match first {
-        "if" => {
+        "if" | "elif" => {
             // Parse if/then/elif/else/fi
             let (cond_tokens, after_cond) = split_after_token(tokens, "then");
             if after_cond.is_empty() {
@@ -2465,9 +2475,8 @@ fn parse_and_exec(tokens: &[String], ctx: &mut ShellContext) -> i32 {
                 let (else_tokens, _) = split_after_token(&rest[1..], "fi");
                 else_ast = Some(else_tokens);
             } else if rest.first().map(|s| s.as_str()) == Some("elif") {
-                // Nested elif → recursive if
-                let elif_ast = parse_and_return_tokens(&rest);
-                else_ast = Some(elif_ast);
+                // Nested elif → recursive if (full rest passed to parse_and_exec)
+                else_ast = Some(rest.clone());
             }
 
             let cond_status = exec_group_tokens(&cond, ctx);
@@ -2799,7 +2808,7 @@ fn execute_sequence(tokens: &[String], ctx: &mut ShellContext) -> i32 {
 
     // Check for control flow keywords (only keywords, not function names)
     let first = tokens[0].as_str();
-    if matches!(first, "if" | "for" | "while" | "until" | "case" | "{" | "(") {
+    if matches!(first, "if" | "elif" | "for" | "while" | "until" | "case" | "{" | "(") {
         return parse_and_exec(tokens, ctx);
     }
     // Check for function definition: name() { body }

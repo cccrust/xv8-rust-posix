@@ -137,8 +137,9 @@ test -n "x";           check_status "-n nonempty" 0
 echo "### 10. if/then/elif/else/fi"
 _r=$(if true; then echo yes; fi);            check "if true" "yes" "$_r"
 _r=$(if false; then echo yes; else echo no; fi); check "if false+else" "no" "$_r"
-_r=$(if false; then echo a; else if true; then echo b; else echo c; fi; fi); check "if/else-if" "b" "$_r"
-_r=$(if false; then echo a; else if false; then echo b; else echo c; fi; fi); check "if/else-if fallthrough" "c" "$_r"
+_r=$(if false; then echo a; elif true; then echo b; else echo c; fi); check "elif true" "b" "$_r"
+_r=$(if false; then echo a; elif false; then echo b; else echo c; fi); check "elif false+else" "c" "$_r"
+_r=$(if false; then echo a; elif false; then echo b; elif true; then echo c; else echo d; fi); check "multi elif" "c" "$_r"
 x=""; if true; then x="executed"; fi
 check "if without subshell" "executed" "$x"
 
@@ -230,6 +231,22 @@ check "source . file" "works" "$SRCTEST"
 echo "### 23. readonly"
 readonly ROVAR=immutable
 check "readonly variable" "immutable" "$ROVAR"
+
+echo "### 24. Single quotes prevent expansion"
+x=hello; _r=$(echo '$x'); check "single quotes prevent expansion" '$x' "$_r"
+_r=$(echo 'hello world'); check "single quotes multi-word" "hello world" "$_r"
+
+echo "### 25. test string comparison with empty string"
+test "x" = ""; check_status 'test "x" = "" (should fail)' 1
+test "" = "x"; check_status 'test "" = "x" (should fail)' 1
+test "abc" = "def"; check_status 'test "abc" = "def" (should fail)' 1
+test "abc" = "abc"; check_status 'test "abc" = "abc" (should succeed)' 0
+
+echo "### 26. Empty-string arguments"
+count_args() { check "empty-string func args (count)" "3" "$#"; }
+count_args "" "x" ""
+check_empty "empty arg from echo" "$(echo "")"
+_r=$(echo ""); check_empty "empty arg from variable" "$_r"
 
 rm -rf "$TDIR"
 
