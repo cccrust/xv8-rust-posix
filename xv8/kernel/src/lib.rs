@@ -13,6 +13,7 @@ pub(crate) mod console;
 pub(crate) mod e1000;
 pub(crate) mod entry;
 pub(crate) mod exec;
+pub(crate) mod fdtable;
 pub(crate) mod file;
 pub(crate) mod fs;
 pub mod kalloc;

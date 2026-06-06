@@ -11,16 +11,15 @@ use crate::sysfile::fd_alloc;
 pub fn sys_tcp_socket(_args: &SyscallArgs) -> Result<usize, SysError> {
     let tcp_id = try_log!(TcpTable::socket().map_err(SysError::from));
 
-    let (fd, file) = match log!(File::alloc()) {
-        Ok(mut file) => match log!(fd_alloc(file.clone())) {
-            Ok(fd) => (fd, file),
-            Err(e) => {
-                file.close();
-                return Err(e);
-            }
-        },
+    let mut file = match log!(File::alloc()) {
+        Ok(f) => f,
+        Err(e) => return Err(SysError::from(e)),
+    };
+    let fd = match log!(fd_alloc(file.clone())) {
+        Ok(fd) => fd,
         Err(e) => {
-            return Err(SysError::from(e));
+            file.close();
+            return Err(e);
         }
     };
 
@@ -69,16 +68,15 @@ pub fn sys_tcp_accept(args: &SyscallArgs) -> Result<usize, SysError> {
     let child_id = try_log!(TcpTable::accept(tcp_id).map_err(SysError::from));
 
     // allocate a new file descriptor for the child
-    let (fd, new_file) = match log!(File::alloc()) {
-        Ok(mut file) => match log!(fd_alloc(file.clone())) {
-            Ok(fd) => (fd, file),
-            Err(e) => {
-                file.close();
-                return Err(e);
-            }
-        },
+    let mut new_file = match log!(File::alloc()) {
+        Ok(f) => f,
+        Err(e) => return Err(SysError::from(e)),
+    };
+    let fd = match log!(fd_alloc(new_file.clone())) {
+        Ok(fd) => fd,
         Err(e) => {
-            return Err(SysError::from(e));
+            new_file.close();
+            return Err(e);
         }
     };
 
@@ -190,18 +188,19 @@ pub fn sys_socket(args: &SyscallArgs) -> Result<usize, SysError> {
         try_log!(SocketTable::open(Ipv4Addr::UNSPECIFIED, port, None).map_err(SysError::from));
 
     // allocate a file structure and a file descriptor
-    let (fd, file) = match log!(File::alloc()) {
-        Ok(mut file) => match log!(fd_alloc(file.clone())) {
-            Ok(fd) => (fd, file),
-            Err(e) => {
-                file.close();
-                SocketTable::close(socket_id);
-                return Err(e);
-            }
-        },
+    let mut file = match log!(File::alloc()) {
+        Ok(f) => f,
         Err(e) => {
             SocketTable::close(socket_id);
             return Err(SysError::from(e));
+        }
+    };
+    let fd = match log!(fd_alloc(file.clone())) {
+        Ok(fd) => fd,
+        Err(e) => {
+            file.close();
+            SocketTable::close(socket_id);
+            return Err(e);
         }
     };
 

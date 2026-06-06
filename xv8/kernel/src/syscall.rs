@@ -225,7 +225,9 @@ impl<'a> SyscallArgs<'a> {
             err!(SysError::BadDescriptor);
         }
 
-        if let Some(file) = &current_proc().data().open_files[fd] {
+        let data = current_proc().data();
+        let files = data.open_files.as_ref().unwrap().files.lock();
+        if let Some(file) = &files[fd] {
             return Ok((fd, file.clone()));
         }
 

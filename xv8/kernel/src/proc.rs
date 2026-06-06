@@ -5,10 +5,12 @@ use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use alloc::boxed::Box;
 use alloc::string::String;
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use crate::error::KernelError;
 use crate::exec::exec;
+use crate::fdtable::FdTable;
 use crate::file::File;
 use crate::fs::{self, Inode, Path};
 use crate::log::Operation;
@@ -372,8 +374,8 @@ pub struct ProcData {
     pub trapframe: Option<Box<TrapFrame>>,
     /// swtch() here to run process
     pub context: Context,
-    /// Open files
-    pub open_files: [Option<File>; NOFILE],
+    /// Open files (shared between threads)
+    pub open_files: Option<Arc<FdTable>>,
     /// Current directory
     pub cwd: Inode,
     /// Process name
@@ -420,7 +422,7 @@ impl ProcData {
             pagetable: None,
             trapframe: None,
             context: Context::new(),
-            open_files: [const { None }; NOFILE],
+            open_files: None,
             cwd: Inode::new(0, 0, 0),
             name: String::new(),
             signals: signal::SignalState::new(),
@@ -707,6 +709,7 @@ impl ProcTable {
                 let data = unsafe { proc.data_mut() };
                 data.context.zero();
                 data.context.sp = (data.kstack + NKSTACK_PAGES * PGSIZE).as_usize();
+                data.open_files = Some(FdTable::alloc_empty());
 
                 return Ok((proc, inner));
             }
@@ -873,12 +876,8 @@ pub fn fork() -> Result<Pid, KernelError> {
     // cause fork to return 0 in the child
     new_trapframe.a0 = 0;
 
-    // increment reference counts on open file descriptors
-    for (i, file) in data.open_files.iter_mut().enumerate() {
-        if let Some(file) = file.as_mut() {
-            new_data.open_files[i] = Some(file.dup());
-        }
-    }
+    // share or duplicate file descriptors
+    new_data.open_files = Some(FdTable::dup_from(data.open_files.as_ref().unwrap()));
     new_data.cwd = data.cwd.dup();
 
     new_data.name = data.name.clone();
@@ -943,6 +942,7 @@ pub fn clone_proc(flags: usize, stack: usize) -> Result<Pid, KernelError> {
 
     let share_vm = (flags & 0x100) != 0; // CLONE_VM
     let share_thread_group = (flags & 0x10000) != 0; // CLONE_THREAD
+    let share_files = (flags & 0x400) != 0; // CLONE_FILES
 
     let size = data.size;
 
@@ -980,6 +980,13 @@ pub fn clone_proc(flags: usize, stack: usize) -> Result<Pid, KernelError> {
 
     // inherit name
     new_data.name = data.name.clone();
+
+    // share or duplicate file descriptors
+    if share_files {
+        new_data.open_files = Some(Arc::clone(data.open_files.as_ref().unwrap()));
+    } else {
+        new_data.open_files = Some(FdTable::dup_from(data.open_files.as_ref().unwrap()));
+    }
 
     // set thread group
     let parent_inner = proc.inner.lock();
@@ -1032,10 +1039,15 @@ pub fn exit(status: isize) -> ! {
     let (proc, data) = current_proc_and_data_mut();
     assert!(!proc.is_init_proc(), "init exiting");
 
-    // close all open files
-    for file in &mut data.open_files {
-        if let Some(mut file) = file.take() {
-            file.close();
+    // Close all open files without holding the fd table lock across close()
+    loop {
+        let mut file = {
+            let mut files = data.open_files.as_ref().unwrap().files.lock();
+            files.iter_mut().find_map(|entry| entry.take())
+        };
+        match file {
+            Some(ref mut f) => f.close(),
+            None => break,
         }
     }
 

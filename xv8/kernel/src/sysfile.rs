@@ -11,10 +11,10 @@ use crate::exec::exec;
 use crate::file::{FILE_TABLE, File, FileType};
 use crate::fs::{BSIZE, Directory, Inode, InodeType, MAXFILE, Path};
 use crate::log::Operation;
-use crate::param::{MAXARG, MAXPATH, NDEV};
+use crate::param::{MAXARG, MAXPATH, NDEV, NOFILE};
 use crate::pipe::Pipe;
 use crate::proc;
-use crate::proc::current_proc_and_data_mut;
+use crate::proc::{current_proc, current_proc_and_data_mut};
 use crate::riscv::PGSIZE;
 use crate::spinlock::SpinLock;
 use crate::syscall::{SysError, SyscallArgs};
@@ -23,9 +23,10 @@ use crate::vm::VA;
 /// Allocates a file descriptor for the give file.
 /// Takes over file reference from caller on success.
 pub fn fd_alloc(file: File) -> Result<usize, SysError> {
-    let (_proc, data) = current_proc_and_data_mut();
+    let data = proc::current_proc().data();
+    let mut files = data.open_files.as_ref().unwrap().files.lock();
 
-    for (fd, open_file) in data.open_files.iter_mut().enumerate() {
+    for (fd, open_file) in files.iter_mut().enumerate() {
         if open_file.is_none() {
             *open_file = Some(file);
             return Ok(fd);
@@ -46,29 +47,33 @@ pub fn sys_dup2(args: &SyscallArgs) -> Result<usize, SysError> {
     let oldfd = args.get_int(0) as usize;
     let newfd = args.get_int(1) as usize;
 
-    if oldfd >= crate::param::NOFILE || newfd >= crate::param::NOFILE {
+    if oldfd >= NOFILE || newfd >= NOFILE {
         err!(SysError::BadDescriptor);
     }
 
-    let (_, data) = current_proc_and_data_mut();
+    let data = proc::current_proc().data();
+    let mut files = data.open_files.as_ref().unwrap().files.lock();
 
-    let mut old_file = match data.open_files[oldfd].take() {
+    let old_file = match files[oldfd].take() {
         Some(f) => f,
         None => return Err(SysError::BadDescriptor),
     };
 
     if oldfd == newfd {
-        data.open_files[oldfd] = Some(old_file);
+        files[oldfd] = Some(old_file);
         return Ok(newfd);
     }
 
-    if let Some(mut existing) = data.open_files[newfd].take() {
-        existing.close();
+    let existing = files[newfd].take();
+    let new_file = old_file.dup();
+    files[newfd] = Some(new_file);
+    files[oldfd] = Some(old_file);
+    drop(files);
+
+    if let Some(mut f) = existing {
+        f.close();
     }
 
-    let mut new_file = old_file.dup();
-    data.open_files[newfd] = Some(new_file);
-    data.open_files[oldfd] = Some(old_file);
     Ok(newfd)
 }
 
@@ -87,12 +92,21 @@ pub fn sys_write(args: &SyscallArgs) -> Result<usize, SysError> {
 }
 
 pub fn sys_close(args: &SyscallArgs) -> Result<usize, SysError> {
-    let (fd, mut file) = try_log!(args.get_file(0));
+    let fd = args.get_int(0) as usize;
 
-    let (_proc, data) = current_proc_and_data_mut();
+    if fd >= NOFILE {
+        err!(SysError::BadDescriptor);
+    }
 
-    data.open_files[fd] = None;
-    file.close();
+    let data = proc::current_proc().data();
+    let mut files = data.open_files.as_ref().unwrap().files.lock();
+
+    let file = files[fd].take();
+    drop(files);
+
+    if let Some(mut f) = file {
+        f.close();
+    }
 
     Ok(0)
 }
@@ -461,7 +475,9 @@ pub fn sys_pipe(args: &SyscallArgs) -> Result<usize, SysError> {
     };
 
     let Ok(fd1) = log!(fd_alloc(write.clone())) else {
-        data.open_files[fd0] = None;
+        let mut files = data.open_files.as_ref().unwrap().files.lock();
+        files[fd0] = None;
+        drop(files);
         read.close();
         write.close();
         err!(SysError::TooManyFiles);
@@ -472,8 +488,10 @@ pub fn sys_pipe(args: &SyscallArgs) -> Result<usize, SysError> {
     if log!(pagetable.copy_to(&fd0.to_le_bytes(), fd_array)).is_err()
         || log!(pagetable.copy_to(&fd1.to_le_bytes(), fd_array + size_of_val(&fd1))).is_err()
     {
-        data.open_files[fd0] = None;
-        data.open_files[fd1] = None;
+        let mut files = data.open_files.as_ref().unwrap().files.lock();
+        files[fd0] = None;
+        files[fd1] = None;
+        drop(files);
         read.close();
         write.close();
         err!(SysError::BadAddress);

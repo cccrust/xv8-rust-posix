@@ -92,11 +92,13 @@ fn fd_readiness(fd: usize) -> (bool, bool) {
         return (false, false);
     }
     let (_proc, data) = proc::current_proc_and_data_mut();
-    let file = match &data.open_files[fd] {
-        Some(f) => f.clone(),
-        None => return (false, false),
+    let file = {
+        let files = data.open_files.as_ref().unwrap().files.lock();
+        match &files[fd] {
+            Some(f) => f.clone(),
+            None => return (false, false),
+        }
     };
-    let _ = data;
 
     let inner = FILE_TABLE.inner[file.id].lock();
     match &inner.r#type {
@@ -122,8 +124,10 @@ fn fd_readiness(fd: usize) -> (bool, bool) {
 
 fn find_tcp_id(fd: usize) -> Option<usize> {
     let (_proc, data) = proc::current_proc_and_data_mut();
-    let file = data.open_files[fd].as_ref()?.clone();
-    let _ = data;
+    let file = {
+        let files = data.open_files.as_ref().unwrap().files.lock();
+        files[fd].as_ref()?.clone()
+    };
     let inner = FILE_TABLE.inner[file.id].lock();
     match &inner.r#type {
         FileType::TcpSocket { tcp_id } => Some(*tcp_id),

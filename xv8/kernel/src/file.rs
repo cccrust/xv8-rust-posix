@@ -99,7 +99,7 @@ impl File {
     }
 
     /// Incremets the reference count for the file.
-    pub fn dup(&mut self) -> Self {
+    pub fn dup(&self) -> Self {
         let meta = &mut FILE_TABLE.meta.lock()[self.id];
 
         assert!(meta.ref_count >= 1, "filedup");
