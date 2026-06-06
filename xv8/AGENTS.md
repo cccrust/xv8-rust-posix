@@ -135,10 +135,27 @@ cargo run --release
 
 ## Tests
 
-10 internal tests: fs, pipe, proc, fd, sbrk, cow, net, syscall, neteth, netdns
+17 tests across 4 categories, runnable individually or via `./test.sh`:
 
-- `syscall` test covers: dup2, getppid, setuid, setgid, getpgid, isatty, tcgetattr, tcsetattr
-- `neteth` test covers: DHCP wait + UDP send to QEMU gateway (10.0.2.2), loopback echo
-- `netdns` test covers: DHCP wait + DNS A record query to QEMU DNS proxy (10.0.2.3)
+| Script | Tests | Depends on |
+|--------|-------|------------|
+| `test_core.sh` | fs, pipe, proc, fd, sbrk, cow, syscall (7) | user package only |
+| `test_async.sh` | async, httpepoll, axum (3) | user package only |
+| `test_net.sh` | net, neteth, netdns, tcpecho, nettools, http (6) | posix + net tools |
+| `test_shell.sh` | shtest (1 = 93 shell tests) | posix + net tools |
 
-All 10 tests pass successfully.
+```bash
+./test.sh                    # All 17 tests (full QEMU run per category)
+./test_core.sh               # Fast: kernel basics only (no posix/net build)
+./test_async.sh              # Async runtime + tokio-compat (no posix/net build)
+./test_net.sh                # Network: DHCP, DNS, TCP echo, httpd, tcpserver
+./test_shell.sh              # Shell: 93 POSIX shell behavior tests
+```
+
+- Test filtering via `/test_args` file (comma-separated exact match prefixes)
+- Core and async tests build only `--package user` (fast, no cross-compile)
+- Net and shell tests use `./mkfs.sh` which includes all posix + net binaries
+- Test runner forks + execs each test binary, collects pass/fail
+- `shtest` runs xv8's shell against `shtest.sh` (93 TAP-format tests)
+
+All 17 tests pass. Other xv8 user binaries: demo, primes, tcp_echo, udp, uptime, zombie.

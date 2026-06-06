@@ -128,6 +128,7 @@ impl File {
 
             meta.ref_count = 0;
             inner.r#type = FileType::None;
+            inner.nonblocking = false;
 
             drop(meta_guard);
             copy

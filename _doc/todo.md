@@ -91,6 +91,21 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 - xv8 QEMU `_async` 測試通過（14/14）：6 項 subtests
 - Root `test.sh` 全專案合併測試（9/9 passed）
 
+## v2.5 — Kernel epoll + async I/O + tokio compat ✅
+
+**已於 `_doc/v2.5.md` 記錄。**
+
+## v2.6 — POSIX Shell 整合 xv8 + fix argv 傳遞 ✅
+
+**已於 `_doc/v2.6.md` 記錄。**
+
+## v2.7 — Shell Bug Fixes: `elif`, Empty Strings, `test`, Single Quotes ✅
+
+**已於 `_doc/v2.7.md` 記錄。**
+- 5 shell bugs fixed: `elif` keyword, empty-string args, `test "x" = ""`, single-quote expansion, `$(echo "")` inside double quotes
+- Test suite expanded from 83→93 tests
+- Host 93/93 pass, QEMU 16/16 pass
+
 ## 版本對照
 
 | 版本 | 主要內容 | 依賴 |
@@ -108,6 +123,16 @@ cargo build --release -p tools --target riscv64gc-unknown-none-elf --features cr
 | v2.4 | Async Runtime（`block_on` + `Sleep`）✅ | v2.3 |
 | v2.5 | Kernel epoll + async I/O + tokio compat ✅ | v2.4 |
 | v2.6 | POSIX shell 整合 xv8 + fix argv 傳遞 ✅ | v2.5 |
+| v2.7 | Shell bugs fix (elif, empty strings, test, quotes) ✅ | v2.6 |
+
+## v2.8 — Async HTTP Server Test (xv8-tokio-compat) ✅
+
+**已於 `_doc/v2.8.md` 記錄。**
+- `_axum` test: async HTTP server with `Runtime::block_on` + `TcpListener` + `AsyncReadExt`/`AsyncWriteExt`
+- `reactor::ensure_init()` fix — prevents async I/O from silently hanging
+- Test filter changed from `starts_with` to exact match
+- Modular test scripts: `test_core.sh`, `test_net.sh`, `test_async.sh`, `test_shell.sh`
+- All 17 QEMU tests pass (7 core + 6 net + 3 async + 1 shell)
 
 ### Next
-- v2.7: Shell bugs fix (`elif`, empty-string args, `test = ""`, single-quote expansion)
+- v2.9: TBD

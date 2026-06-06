@@ -1,5 +1,6 @@
 #![no_std]
 
+use core::alloc::{GlobalAlloc, Layout};
 use core::panic::PanicInfo;
 
 #[macro_use]
@@ -14,6 +15,26 @@ pub use args::*;
 pub use io::{Read, Stderr, Stdin, Stdout, Write};
 pub use line::LineEditor;
 pub use syscall::*;
+
+/// Simple bump allocator for user-space programs using `sbrk`.
+/// Memory is never freed individually; it's reclaimed when the process exits.
+struct SbrkAlloc;
+
+unsafe impl GlobalAlloc for SbrkAlloc {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let size = if layout.size() < 1 { 1 } else { layout.size() };
+        let old_brk = crate::syscall::raw::sbrk(size);
+        if old_brk <= 0 {
+            core::ptr::null_mut()
+        } else {
+            old_brk as *mut u8
+        }
+    }
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: Layout) {}
+}
+
+#[global_allocator]
+static SBRK_ALLOC: SbrkAlloc = SbrkAlloc;
 
 unsafe extern "Rust" {
     /// The entry point for user programs.

@@ -61,18 +61,20 @@ cd posix && cargo build --release && PATH="target/release:$PATH" sh tools/tests/
 cd posix && cargo build --release && PATH="target/release:$PATH" sh tools/tests/test_tools_core.sh
 cd posix && cargo build --release && PATH="target/release:$PATH" sh tools/tests/test_v2.0.sh
 # Rust integration test: cargo test
+# shtest (93 shell behavior tests):
+cargo build --release -p tools --bin sh && target/release/sh xv8/shtest.sh
 ```
 
 xv8 QEMU flow (`xv8/test.sh`):
 1. Build user programs (`cargo build --release --package user`)
-2. Create fresh 256M `fs.img` with test binaries + `/tmp/testmode` marker
-3. Run QEMU (`cargo run --release`); `init.rs` detects testmode and runs testrunner
-4. Restores original `fs.img` from backup on exit
-5. 14 testbins: fs, pipe, proc, fd, sbrk, cow, net, syscall, neteth, netdns, tcpecho, nettools, http, async
+2. Build POSIX tools (`cargo build --manifest-path ../posix/Cargo.toml --package tools --no-default-features`)
+3. Create fresh 256M `fs.img` with POSIX tools + xv8 test binaries + `/tmp/testmode` marker
+4. Run QEMU (`cargo run --release`); `init.rs` detects testmode and runs testrunner
+5. Restores original `fs.img` from backup on exit
+6. 16 testbins: fs, pipe, proc, fd, sbrk, cow, net, syscall, neteth, netdns, tcpecho, nettools, http, async, httpepoll, shtest
 
 ## Planning Docs
 
 - `_doc/todo.md` — master development plan
-- `_doc/todo3.md` — async / network roadmap
 - `_doc/xv8-net-status.md` — network stack architecture
-- `_doc/v*.md` — per-version changelogs (v1.3–v2.4)
+- `_doc/v*.md` — per-version changelogs (v1.3–v2.7)

@@ -15,16 +15,24 @@ struct ReactorInner {
 }
 
 pub fn init() -> Option<usize> {
+    let mut guard = lock(&REACTOR);
+    if guard.is_some() {
+        return guard.as_ref().map(|r| r.epoll_fd);
+    }
     let ret = xv8_libc::epoll_create1(0);
     if ret < 0 {
         return None;
     }
     let epoll_fd = ret as usize;
-    *lock(&REACTOR) = Some(ReactorInner {
+    *guard = Some(ReactorInner {
         epoll_fd,
         wakers: HashMap::new(),
     });
     Some(epoll_fd)
+}
+
+pub fn ensure_init() {
+    init();
 }
 
 pub fn register_read(fd: usize, waker: Waker) {

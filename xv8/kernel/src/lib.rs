@@ -15,7 +15,7 @@ pub(crate) mod entry;
 pub(crate) mod exec;
 pub(crate) mod file;
 pub(crate) mod fs;
-pub(crate) mod kalloc;
+pub mod kalloc;
 pub(crate) mod kernelvec;
 pub(crate) mod log;
 pub(crate) mod memlayout;

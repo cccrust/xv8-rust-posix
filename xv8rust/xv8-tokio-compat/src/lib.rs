@@ -1,5 +1,7 @@
 #![no_std]
 
+extern crate alloc;
+
 use core::future::Future;
 use core::pin::Pin;
 use core::task::{Context, Poll};
@@ -7,7 +9,9 @@ use xv8_async::io_async::{AsyncTcpStream as InnerStream, AsyncTcpListener as Inn
 use xv8_user_std::io::{ErrorKind, Result};
 use xv8_user_std::net::SocketAddr;
 
+pub mod io;
 pub mod runtime;
+pub mod sync;
 pub mod time;
 
 #[derive(Debug)]
@@ -56,11 +60,11 @@ impl TcpStream {
         }
     }
 
-    pub fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize>> {
+    pub fn poll_read_inner(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<Result<usize>> {
         Pin::new(&mut self.get_mut().0).poll_read(cx, buf)
     }
 
-    pub fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>> {
+    pub fn poll_write_inner(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<Result<usize>> {
         Pin::new(&mut self.get_mut().0).poll_write(cx, buf)
     }
 

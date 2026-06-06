@@ -185,7 +185,9 @@ impl TcpTable {
 
     pub fn socket() -> Result<usize, NetError> {
         let mut table = TCP_TABLE.lock();
-        let id = table.entries.iter().position(|e| e.is_none()).ok_or(NetError::TableFull)?;
+        let id = table.entries.iter().position(|e| e.is_none())
+            .or_else(|| table.entries.iter().position(|e| matches!(e, Some(c) if c.state == TcpState::Closed)))
+            .ok_or(NetError::TableFull)?;
         table.entries[id] = Some(TcpConnection::new());
         Ok(id)
     }
@@ -372,7 +374,9 @@ pub fn handle_tcp(src_ip: Ipv4Addr, dest_ip: Ipv4Addr, data: &[u8]) -> Result<()
     if has_syn && !has_ack {
         let mut table = TCP_TABLE.lock();
         let Some(listener_id) = table.find_listener(dest_port) else { return Ok(()) };
-        let child_id = table.entries.iter().position(|e| e.is_none()).ok_or(NetError::TableFull)?;
+        let child_id = table.entries.iter().position(|e| e.is_none())
+            .or_else(|| table.entries.iter().position(|e| matches!(e, Some(c) if c.state == TcpState::Closed)))
+            .ok_or(NetError::TableFull)?;
         let mut child = TcpConnection::new();
         child.state = TcpState::SynReceived;
         child.local_port = dest_port;

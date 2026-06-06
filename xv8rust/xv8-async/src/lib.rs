@@ -205,6 +205,7 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
+        reactor::ensure_init();
         let _guard = self.enter();
         let handle = self.spawn_inner(future);
         self.run_until_complete(handle)

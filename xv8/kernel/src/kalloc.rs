@@ -49,10 +49,9 @@ pub fn free_page(ptr: *mut u8) {
 }
 
 /// Kernel memory allocator
-#[global_allocator]
-static KMEM: Kmem = Kmem(SpinLock::new(None, "kmem"));
+pub static KMEM: Kmem = Kmem(SpinLock::new(None, "kmem"));
 
-struct Kmem(SpinLock<Option<BuddyAlloc>>);
+pub struct Kmem(SpinLock<Option<BuddyAlloc>>);
 
 /// # Safety
 /// Even though `BuddyAlloc` is not thread safe, `Kmem` is thread safe because it is guarded by a `SpinLock`.

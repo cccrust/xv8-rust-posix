@@ -3,7 +3,7 @@ use core::mem;
 use crate::kernelvec::kernelvec;
 use crate::memlayout::{E1000_IRQ, TRAMPOLINE, UART0_IRQ, VIRTIO0_IRQ};
 use crate::param::NKSTACK_PAGES;
-use crate::proc::{self, Channel};
+use crate::proc::{self, Channel, TrapFrame};
 use crate::riscv::{
     PGSIZE, interrupts,
     registers::{satp, scause, sepc, sstatus, stimecmp, stval, stvec, time, tp},
@@ -79,6 +79,29 @@ pub unsafe fn usertrap() {
                             stval::read(),
                         );
                     }
+                    proc.inner.lock().killed = true;
+                }
+            }
+
+            // Illegal instruction — emulate CSR reads for atomic support
+            scause::Trap::Exception(scause::Exception::IllegalInstruction) => {
+                let inst = stval::read();
+                // CSR instructions have opcode 0x73 (1110011)
+                if inst & 0x7f == 0x73 {
+                    let rd = (inst >> 7) & 0x1f;
+                    if rd != 0 {
+                        write_xreg(trapframe, rd, 0);
+                    }
+                    trapframe.epc += 4;
+                } else {
+                    let pid = proc.inner.lock().pid;
+                    println!(
+                        "! illegal instruction scause=0x{:X} pid={} sepc=0x{:X} stval=0x{:X}",
+                        scause.bits(),
+                        *pid,
+                        sepc::read(),
+                        inst,
+                    );
                     proc.inner.lock().killed = true;
                 }
             }
@@ -413,6 +436,43 @@ fn device_interrupt(intr: scause::Interrupt) -> Option<InterruptType> {
 
         // some other interrupt, we don't recognize
         _ => None,
+    }
+}
+
+fn write_xreg(tf: &mut TrapFrame, reg: usize, val: usize) {
+    match reg {
+        1 => tf.ra = val,
+        2 => tf.sp = val,
+        3 => tf.gp = val,
+        4 => tf.tp = val,
+        5 => tf.t0 = val,
+        6 => tf.t1 = val,
+        7 => tf.t2 = val,
+        8 => tf.s0 = val,
+        9 => tf.s1 = val,
+        10 => tf.a0 = val,
+        11 => tf.a1 = val,
+        12 => tf.a2 = val,
+        13 => tf.a3 = val,
+        14 => tf.a4 = val,
+        15 => tf.a5 = val,
+        16 => tf.a6 = val,
+        17 => tf.a7 = val,
+        18 => tf.s2 = val,
+        19 => tf.s3 = val,
+        20 => tf.s4 = val,
+        21 => tf.s5 = val,
+        22 => tf.s6 = val,
+        23 => tf.s7 = val,
+        24 => tf.s8 = val,
+        25 => tf.s9 = val,
+        26 => tf.s10 = val,
+        27 => tf.s11 = val,
+        28 => tf.t3 = val,
+        29 => tf.t4 = val,
+        30 => tf.t5 = val,
+        31 => tf.t6 = val,
+        _ => {}
     }
 }
 
