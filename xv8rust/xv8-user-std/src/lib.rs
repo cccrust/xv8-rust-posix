@@ -73,8 +73,10 @@ pub mod time;
 pub mod thread;
 pub mod ffi;
 pub mod net;
+pub mod mpsc;
 
 pub use alloc::vec::Vec;
+pub use alloc::collections::{BTreeMap, BTreeSet, BinaryHeap, LinkedList, VecDeque};
 
 #[macro_export]
 macro_rules! vec {

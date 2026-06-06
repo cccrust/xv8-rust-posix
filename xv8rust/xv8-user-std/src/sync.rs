@@ -1,6 +1,7 @@
 use core::cell::UnsafeCell;
+use core::cell::OnceCell;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::{AtomicBool, AtomicIsize, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 
 pub use core::sync::*;
 pub use alloc::sync::Arc;
@@ -26,6 +27,8 @@ pub enum TryLockError<T> {
 
 pub struct Mutex<T> {
     locked: AtomicBool,
+    waiters: AtomicU32,
+    fds: OnceCell<(usize, usize)>,
     value: UnsafeCell<T>,
 }
 
@@ -34,14 +37,49 @@ unsafe impl<T: Send> Sync for Mutex<T> {}
 
 impl<T> Mutex<T> {
     pub const fn new(value: T) -> Self {
-        Self { locked: AtomicBool::new(false), value: UnsafeCell::new(value) }
+        Self {
+            locked: AtomicBool::new(false),
+            waiters: AtomicU32::new(0),
+            fds: OnceCell::new(),
+            value: UnsafeCell::new(value),
+        }
+    }
+
+    fn pipe_fds(&self) -> &(usize, usize) {
+        self.fds.get_or_init(|| {
+            let mut fds = [0usize; 2];
+            let ret = xv8_libc::pipe(fds.as_mut_ptr());
+            assert!(ret >= 0, "Mutex pipe creation failed");
+            (fds[0], fds[1])
+        })
     }
 
     pub fn lock(&self) -> LockResult<MutexGuard<'_, T>> {
-        while self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-            core::hint::spin_loop();
+        loop {
+            for _ in 0..100 {
+                if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+                    return Ok(MutexGuard { mutex: self });
+                }
+                core::hint::spin_loop();
+            }
+
+            self.waiters.fetch_add(1, Ordering::Acquire);
+
+            if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+                self.waiters.fetch_sub(1, Ordering::Release);
+                return Ok(MutexGuard { mutex: self });
+            }
+
+            let (rfd, _) = *self.pipe_fds();
+            let mut buf = [0u8; 1];
+            let ret = xv8_libc::read(rfd, buf.as_mut_ptr(), 1);
+            if ret < 0 {
+                self.waiters.fetch_sub(1, Ordering::Release);
+                continue;
+            }
+
+            self.waiters.fetch_sub(1, Ordering::Release);
         }
-        Ok(MutexGuard { mutex: self })
     }
 
     pub fn try_lock(&self) -> TryLockResult<MutexGuard<'_, T>> {
@@ -60,13 +98,21 @@ impl<T> Mutex<T> {
     }
 }
 
+impl<T: Default> Default for Mutex<T> {
+    fn default() -> Self {
+        Self::new(T::default())
+    }
+}
+
 pub struct MutexGuard<'a, T> {
     mutex: &'a Mutex<T>,
 }
 
+unsafe impl<T: Sync> Send for MutexGuard<'_, T> {}
+unsafe impl<T: Sync> Sync for MutexGuard<'_, T> {}
+
 impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
-
     fn deref(&self) -> &T {
         unsafe { &*self.mutex.value.get() }
     }
@@ -81,6 +127,11 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         self.mutex.locked.store(false, Ordering::Release);
+        if self.mutex.waiters.load(Ordering::Relaxed) > 0 {
+            let (_, wfd) = *self.mutex.pipe_fds();
+            let buf = [1u8];
+            let _ = xv8_libc::write(wfd, buf.as_ptr(), 1);
+        }
     }
 }
 
@@ -160,7 +211,6 @@ pub struct RwLockReadGuard<'a, T> {
 
 impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
-
     fn deref(&self) -> &T {
         unsafe { &*self.lock.value.get() }
     }
@@ -178,7 +228,6 @@ pub struct RwLockWriteGuard<'a, T> {
 
 impl<T> Deref for RwLockWriteGuard<'_, T> {
     type Target = T;
-
     fn deref(&self) -> &T {
         unsafe { &*self.lock.value.get() }
     }
@@ -193,5 +242,82 @@ impl<T> DerefMut for RwLockWriteGuard<'_, T> {
 impl<T> Drop for RwLockWriteGuard<'_, T> {
     fn drop(&mut self) {
         self.lock.state.store(0, Ordering::Release);
+    }
+}
+
+pub struct Condvar {
+    fds: OnceCell<(usize, usize)>,
+}
+
+impl Condvar {
+    pub const fn new() -> Self {
+        Self { fds: OnceCell::new() }
+    }
+
+    fn pipe_fds(&self) -> &(usize, usize) {
+        self.fds.get_or_init(|| {
+            let mut fds = [0usize; 2];
+            let ret = xv8_libc::pipe(fds.as_mut_ptr());
+            assert!(ret >= 0, "Condvar pipe creation failed");
+            (fds[0], fds[1])
+        })
+    }
+
+    pub fn wait<'a, U>(&self, guard: MutexGuard<'a, U>) -> LockResult<MutexGuard<'a, U>> {
+        let mutex = guard.mutex;
+        drop(guard);
+
+        let (rfd, _) = *self.pipe_fds();
+        let mut buf = [0u8; 1];
+        let _ = xv8_libc::read(rfd, buf.as_mut_ptr(), 1);
+
+        mutex.lock()
+    }
+
+    pub fn notify_one(&self) {
+        let (_, wfd) = *self.pipe_fds();
+        let buf = [1u8];
+        let _ = xv8_libc::write(wfd, buf.as_ptr(), 1);
+    }
+
+    pub fn notify_all(&self) {
+        let (_, wfd) = *self.pipe_fds();
+        let buf = [1u8; 64];
+        let _ = xv8_libc::write(wfd, buf.as_ptr(), 64);
+    }
+}
+
+pub struct LazyLock<T, F = fn() -> T> {
+    cell: OnceCell<T>,
+    init: UnsafeCell<Option<F>>,
+}
+
+unsafe impl<T: Send + Sync, F: Send> Send for LazyLock<T, F> {}
+unsafe impl<T: Send + Sync, F: Sync> Sync for LazyLock<T, F> {}
+
+impl<T, F: FnOnce() -> T> LazyLock<T, F> {
+    pub const fn new(f: F) -> Self {
+        Self { cell: OnceCell::new(), init: UnsafeCell::new(Some(f)) }
+    }
+
+    pub fn force(this: &Self) -> &T {
+        this.cell.get_or_init(|| {
+            let f = unsafe { (*this.init.get()).take().expect("LazyLock already initialized") };
+            f()
+        })
+    }
+
+    pub fn into_inner(this: Self) -> Result<T, F> {
+        match this.cell.into_inner() {
+            Some(v) => Ok(v),
+            None => Err(this.init.into_inner().expect("LazyLock corrupted")),
+        }
+    }
+}
+
+impl<T, F: FnOnce() -> T> Deref for LazyLock<T, F> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        Self::force(self)
     }
 }

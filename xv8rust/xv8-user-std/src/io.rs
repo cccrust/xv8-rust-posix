@@ -537,3 +537,185 @@ pub fn _print(args: core::fmt::Arguments<'_>) {
 pub fn _eprint(args: core::fmt::Arguments<'_>) {
     let _ = Stderr.write_fmt(args);
 }
+
+pub struct BufWriter<W: Write> {
+    inner: Option<W>,
+    buf: [u8; 8192],
+    pos: usize,
+}
+
+impl<W: Write> BufWriter<W> {
+    pub fn new(inner: W) -> Self {
+        BufWriter { inner: Some(inner), buf: [0u8; 8192], pos: 0 }
+    }
+
+    pub fn into_inner(mut self) -> W {
+        self.inner.take().unwrap()
+    }
+
+    pub fn get_ref(&self) -> &W {
+        self.inner.as_ref().unwrap()
+    }
+
+    pub fn get_mut(&mut self) -> &mut W {
+        self.inner.as_mut().unwrap()
+    }
+
+    fn inner(&mut self) -> &mut W {
+        self.inner.as_mut().unwrap()
+    }
+
+    fn flush_buf(&mut self) -> Result<()> {
+        if self.pos > 0 {
+            let len = self.pos;
+            let buf_ptr = self.buf.as_ptr();
+            let inner = self.inner.as_mut().unwrap();
+            let buf_slice = unsafe { core::slice::from_raw_parts(buf_ptr, len) };
+            let n = inner.write(buf_slice)?;
+
+            if n < len {
+                self.buf.copy_within(n..len, 0);
+                self.pos = len - n;
+            } else {
+                self.pos = 0;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<W: Write> Write for BufWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        if buf.len() >= self.buf.len() {
+            self.flush_buf()?;
+            return self.inner().write(buf);
+        }
+        let space = self.buf.len() - self.pos;
+        if buf.len() > space {
+            self.flush_buf()?;
+        }
+        let end = self.pos + buf.len();
+        self.buf[self.pos..end].copy_from_slice(buf);
+        self.pos = end;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.flush_buf()?;
+        self.inner().flush()
+    }
+}
+
+impl<W: Write> Drop for BufWriter<W> {
+    fn drop(&mut self) {
+        if self.inner.is_some() {
+            let _ = self.flush_buf();
+        }
+    }
+}
+
+pub struct LineWriter<W: Write> {
+    inner: BufWriter<W>,
+}
+
+impl<W: Write> LineWriter<W> {
+    pub fn new(inner: W) -> Self {
+        LineWriter { inner: BufWriter::new(inner) }
+    }
+}
+
+impl<W: Write> Write for LineWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let mut written = 0;
+        for (i, &b) in buf.iter().enumerate() {
+            if b == b'\n' {
+                self.inner.write_all(&buf[written..=i])?;
+                self.inner.flush()?;
+                written = i + 1;
+            }
+        }
+        if written < buf.len() {
+            self.inner.write_all(&buf[written..])?;
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        self.inner.flush()
+    }
+}
+
+pub struct Cursor<T> {
+    inner: T,
+    pos: u64,
+}
+
+impl<T> Cursor<T> {
+    pub fn new(inner: T) -> Self {
+        Cursor { inner, pos: 0 }
+    }
+
+    pub fn into_inner(self) -> T {
+        self.inner
+    }
+
+    pub fn get_ref(&self) -> &T {
+        &self.inner
+    }
+
+    pub fn position(&self) -> u64 {
+        self.pos
+    }
+
+    pub fn set_position(&mut self, pos: u64) {
+        self.pos = pos;
+    }
+}
+
+impl<T: AsRef<[u8]>> Read for Cursor<T> {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        let data = self.inner.as_ref();
+        let start = self.pos as usize;
+        if start >= data.len() {
+            return Ok(0);
+        }
+        let end = core::cmp::min(start + buf.len(), data.len());
+        let len = end - start;
+        buf[..len].copy_from_slice(&data[start..end]);
+        self.pos += len as u64;
+        Ok(len)
+    }
+}
+
+impl Write for Cursor<Vec<u8>> {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+        let pos = self.pos as usize;
+        let end = pos.checked_add(buf.len()).ok_or(ErrorKind::InvalidInput)?;
+        if end > self.inner.len() {
+            self.inner.resize(end, 0);
+        }
+        self.inner[pos..end].copy_from_slice(buf);
+        self.pos = end as u64;
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl<T: AsRef<[u8]>> Seek for Cursor<T> {
+    fn seek(&mut self, pos: SeekFrom) -> Result<u64> {
+        let len = self.inner.as_ref().len() as i64;
+        let new_pos = match pos {
+            SeekFrom::Start(offset) => offset as i64,
+            SeekFrom::Current(delta) => self.pos as i64 + delta,
+            SeekFrom::End(delta) => len + delta,
+        };
+        if new_pos < 0 {
+            return Err(Error::new(ErrorKind::InvalidInput, "seek to negative position"));
+        }
+        self.pos = new_pos as u64;
+        Ok(self.pos)
+    }
+}
