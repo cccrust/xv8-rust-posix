@@ -211,4 +211,6 @@ bench = false
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
 xv8-tokio-compat = { path = "../../xv8rust/xv8-tokio-compat" }
+xv8-http = { path = "../../xv8rust/xv8-http" }
+xv8-router = { path = "../../xv8rust/xv8-router" }
 

@@ -1,6 +1,9 @@
 #![no_std]
 #![no_main]
 
+use xv8_http::{Response, StatusCode};
+use xv8_http::parse::parse_request;
+use xv8_router::{handler_fn, Router};
 use xv8_tokio_compat::io::{AsyncReadExt, AsyncWriteExt};
 use xv8_tokio_compat::runtime::Runtime;
 use xv8_tokio_compat::TcpListener;
@@ -25,14 +28,24 @@ fn serve() {
             .await
             .expect("bind");
 
+        let app = Router::new()
+            .get("/", handler_fn(|| async {
+                Response::new(StatusCode::OK)
+                    .header("content-type", b"text/plain")
+                    .body("ok\n".into())
+            }));
+
         let (mut stream, _) = listener.accept().await.expect("accept");
 
         let mut buf = [0u8; 1024];
         let n = stream.read(&mut buf).await.expect("read");
         check("http request received", n > 0);
 
-        let resp = b"HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nok\n";
-        stream.write_all(resp).await.expect("write_all");
+        let (req, _) = parse_request(&buf[..n]).expect("parse");
+        let handler = app.find(&req);
+        let resp = handler(req).await;
+        let resp_bytes = resp.to_bytes();
+        stream.write_all(&resp_bytes).await.expect("write_all");
 
         println!("  serve: done");
     });
@@ -55,7 +68,7 @@ fn client() {
 
 #[unsafe(no_mangle)]
 fn main(_args: Args) {
-    println!("_axum: async HTTP server (tokio-compat pattern)...");
+    println!("_axum: async HTTP server (Router API)...");
 
     match fork().expect("fork") {
         0 => {

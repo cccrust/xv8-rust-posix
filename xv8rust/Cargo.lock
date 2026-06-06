@@ -308,6 +308,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "xv8-http"
+version = "0.1.0"
+
+[[package]]
 name = "xv8-libc"
 version = "0.1.0"
 
@@ -317,6 +321,13 @@ version = "0.1.0"
 dependencies = [
  "xv8-libc",
  "xv8-user-std",
+]
+
+[[package]]
+name = "xv8-router"
+version = "0.1.0"
+dependencies = [
+ "xv8-http",
 ]
 
 [[package]]

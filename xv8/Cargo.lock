@@ -42,6 +42,8 @@ name = "user"
 version = "1.0.0"
 dependencies = [
  "xv8",
+ "xv8-http",
+ "xv8-router",
  "xv8-tokio-compat",
 ]
 
@@ -61,8 +63,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "xv8-http"
+version = "0.1.0"
+
+[[package]]
 name = "xv8-libc"
 version = "0.1.0"
+
+[[package]]
+name = "xv8-router"
+version = "0.1.0"
+dependencies = [
+ "xv8-http",
+]
 
 [[package]]
 name = "xv8-tokio-compat"

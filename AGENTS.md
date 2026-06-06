@@ -6,7 +6,7 @@ Multi-project Rust workspace (NOT a root Cargo workspace). Four independent work
 |---------|-----|------|
 | xv8 OS | `xv8/` | RISC-V Unix-like OS (nightly + `qemu-system-riscv64`) |
 | POSIX tools | `posix/` | 124 POSIX utilities + shell |
-| xv8 std | `xv8rust/` | std overlay + experimental async/runtime for riscv64 |
+| xv8 std | `xv8rust/` | std overlay + experimental async/runtime + HTTP/router for riscv64 |
 | Network tools | `net/` | ping, dns, tcp, echo, ntp, whois, http, curl, ssh |
 
 ## Commands
@@ -71,10 +71,21 @@ xv8 QEMU flow (`xv8/test.sh`):
 3. Create fresh 256M `fs.img` with POSIX tools + xv8 test binaries + `/tmp/testmode` marker
 4. Run QEMU (`cargo run --release`); `init.rs` detects testmode and runs testrunner
 5. Restores original `fs.img` from backup on exit
-6. 16 testbins: fs, pipe, proc, fd, sbrk, cow, net, syscall, neteth, netdns, tcpecho, nettools, http, async, httpepoll, shtest
+6. 17 testbins across 4 categories: core (fs, pipe, proc, fd, sbrk, cow, syscall), net (net, neteth, netdns, tcpecho, nettools, http), async (async, httpepoll, axum), shell (shtest)
+
+## xv8rust Crates
+
+| Crate | Path | Description |
+|-------|------|-------------|
+| `xv8-libc` | `xv8rust/xv8-libc/` | 52 raw syscall wrappers (RISC-V inline asm) |
+| `xv8-user-std` | `xv8rust/xv8-user-std/` | Userspace std overlay (io, net, sync, time, fs) |
+| `xv8-async` | `xv8rust/xv8-async/` | Async runtime + epoll reactor |
+| `xv8-tokio-compat` | `xv8rust/xv8-tokio-compat/` | Tokio-compatible traits (AsyncRead/Write, TcpStream, runtime) |
+| `xv8-http` | `xv8rust/xv8-http/` | HTTP/1.1 types + parser (`#![no_std]`) |
+| `xv8-router` | `xv8rust/xv8-router/` | Lightweight axum-like Router (`#![no_std]`) |
 
 ## Planning Docs
 
 - `_doc/todo.md` — master development plan
 - `_doc/xv8-net-status.md` — network stack architecture
-- `_doc/v*.md` — per-version changelogs (v1.3–v2.7)
+- `_doc/v*.md` — per-version changelogs (v1.3–v2.9)
