@@ -1153,3 +1153,30 @@ pub fn sys_clearenv(_args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_getpagesize(_args: &SyscallArgs) -> Result<usize, SysError> {
     Ok(crate::riscv::PGSIZE)
 }
+
+/// Clone a process (create a thread).
+///
+/// Arguments (Linux clone convention):
+///   a0 = flags (CLONE_VM=0x100, CLONE_THREAD=0x10000)
+///   a1 = child stack (0 = use parent's sp)
+pub fn sys_clone(args: &SyscallArgs) -> Result<usize, SysError> {
+    let flags = args.get_raw(0);
+    let stack = args.get_addr(1);
+
+    match log!(proc::clone_proc(flags, stack.as_usize())) {
+        Ok(pid) => Ok(*pid),
+        Err(_) => Err(SysError::ResourceUnavailable),
+    }
+}
+
+/// Get thread group ID (same as PID for the group leader).
+pub fn sys_gettid(args: &SyscallArgs) -> Result<usize, SysError> {
+    let tgid = args.proc().inner.lock().tgid;
+    Ok(*tgid)
+}
+
+/// Exit all threads in the current thread group.
+pub fn sys_exit_group(args: &SyscallArgs) -> ! {
+    let status = args.get_int(0);
+    proc::exit_group(status);
+}

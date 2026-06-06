@@ -319,7 +319,7 @@ pub unsafe fn usertrapret() {
     unsafe { sepc::write(trapframe.epc) };
 
     // tell trampoline.S the user page table to switch to.
-    let user_satp = satp::make(data.pagetable().0.as_pa().as_usize());
+    let user_satp = satp::make(data.pagetable().inner.as_pa().as_usize());
 
     // jump to userret in trampoline.S at the top of memory, which switches to the user page table,
     // restores user registers, and switches to user mode with sret.

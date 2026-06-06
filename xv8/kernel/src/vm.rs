@@ -3,6 +3,7 @@ use alloc::boxed::Box;
 use core::fmt::Display;
 use core::mem::MaybeUninit;
 use core::ptr::{self, NonNull};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::fs::{Inode, InodeInner};
 use crate::kalloc;
@@ -588,13 +589,30 @@ impl Kvm {
 }
 
 /// User Page Table
+///
+/// Reference-counted shared page table for `clone(CLONE_VM)` support.
+/// When `share()`d, the underlying page table is kept alive until the last
+/// reference calls `free()` or `proc_free()`.
 #[derive(Debug)]
-pub struct Uvm(pub PageTable);
+pub struct Uvm {
+    pub inner: PageTable,
+    refcount: &'static AtomicUsize,
+}
 
 impl Uvm {
     /// Allocates an empty user page table.
     pub fn try_new() -> Result<Self, VmError> {
-        Ok(Self(try_log!(PageTable::try_new())))
+        let inner = try_log!(PageTable::try_new());
+        let rc = Box::leak(Box::new(AtomicUsize::new(1)));
+        Ok(Uvm { inner, refcount: rc })
+    }
+
+    /// Returns a new `Uvm` handle sharing the same page table.
+    /// The underlying page table is freed only when the last handle is dropped
+    /// via `free()` or `proc_free()`.
+    pub fn share(&self) -> Self {
+        self.refcount.fetch_add(1, Ordering::Relaxed);
+        Uvm { inner: self.inner.clone(), refcount: self.refcount }
     }
 
     /// Removes `npages` of mappings starting from `va`.
@@ -607,7 +625,7 @@ impl Uvm {
         assert!(va.0.is_multiple_of(PGSIZE), "uvmunmap: not aligned");
 
         for i in (va.0..va.0 + (npages * PGSIZE)).step_by(PGSIZE) {
-            match log!(self.0.walk_mut(VA::from(i), false)) {
+            match log!(self.walk_mut(VA::from(i), false)) {
                 // An intermediate page-table page is absent; this region was never touched by a
                 // page fault.
                 Err(_) => continue,
@@ -659,7 +677,7 @@ impl Uvm {
 
             let mem = Box::into_raw(mem);
 
-            if let Err(err) = log!(self.0.map_pages(
+            if let Err(err) = log!(self.map_pages(
                 VA::from(i),
                 PA::from(mem as usize),
                 PGSIZE,
@@ -699,21 +717,34 @@ impl Uvm {
 
     /// Frees user memory pages, then frees page-table pages.
     ///
+    /// Only the last `Uvm` reference actually frees; shared handles (from
+    /// `share()`) simply decrement the refcount.
+    ///
     /// Underlying physical memory is dropped.
     pub fn free(mut self, size: usize) {
-        if size > 0 {
-            self.unmap(VA::from(0), pg_round_up(size) / PGSIZE, true);
+        if self.refcount.fetch_sub(1, Ordering::Relaxed) == 1 {
+            if size > 0 {
+                self.unmap(VA::from(0), pg_round_up(size) / PGSIZE, true);
+            }
+            self.inner.free_walk();
         }
-        self.0.free_walk();
     }
 
     /// Frees a process's page table, and frees the physical memory it refers to.
     ///
+    /// Only the last `Uvm` reference actually frees; shared handles (from
+    /// `share()`) simply decrement the refcount.
+    ///
     /// Underlying physical memory is dropped.
     pub fn proc_free(mut self, size: usize) {
-        self.unmap(VA::from(TRAMPOLINE), 1, false);
-        self.unmap(VA::from(TRAPFRAME), 1, false);
-        self.free(size);
+        if self.refcount.fetch_sub(1, Ordering::Relaxed) == 1 {
+            self.unmap(VA::from(TRAMPOLINE), 1, false);
+            self.unmap(VA::from(TRAPFRAME), 1, false);
+            if size > 0 {
+                self.unmap(VA::from(0), pg_round_up(size) / PGSIZE, true);
+            }
+            self.inner.free_walk();
+        }
     }
 
     /// Copies this prcoess's (parent's) page table and its memory into a child's page table.
@@ -759,6 +790,38 @@ impl Uvm {
     pub fn clear(&mut self, va: VA) -> Result<(), VmError> {
         let pte = try_log!(self.walk_mut(va, false));
         *pte &= !PTE_U;
+        Ok(())
+    }
+
+    /// Copies user-memory PTE entries from `parent` into `self`, sharing the same physical pages
+    /// with writable access (no copy-on-write). Used by `clone(CLONE_VM)` to create a thread that
+    /// shares the parent's address space but has its own page table.
+    ///
+    /// The caller must ensure `self` already has trampoline and trapframe mapped (via
+    /// `create_pagetable`).
+    pub fn share_memory(&mut self, parent: &Uvm, size: usize) -> Result<(), VmError> {
+        for i in (0..size).step_by(PGSIZE) {
+            let pte = match parent.walk(VA::from(i)) {
+                // intermediate page is absent, lazy allocated
+                Err(_) => continue,
+                // leaf pte is absent, lazy allocated
+                Ok(pte) if !pte.is_v() => continue,
+                Ok(pte) => *pte,
+            };
+
+            // map child's virtual address to the same physical address as the parent.
+            if let Err(err) = log!(self.map_pages(VA::from(i), pte.as_pa(), PGSIZE, pte.flags())) {
+                self.unmap(VA::from(0), i / PGSIZE, true);
+                return Err(err);
+            }
+
+            // increment the reference count for the page, it's now shared between parent and child.
+            kalloc::increment_ref(pte.as_pa());
+        }
+
+        // flush TLB
+        unsafe { vma::sfence() };
+
         Ok(())
     }
 
@@ -907,13 +970,13 @@ impl core::ops::Deref for Uvm {
     type Target = PageTable;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.inner
     }
 }
 
 impl core::ops::DerefMut for Uvm {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.inner
     }
 }
 

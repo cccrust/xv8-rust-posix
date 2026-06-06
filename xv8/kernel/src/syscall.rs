@@ -378,6 +378,9 @@ pub enum Syscall {
     EpollCreate1 = 117,
     EpollCtl = 118,
     EpollWait = 119,
+    Clone = 120,
+    Gettid = 121,
+    ExitGroup = 122,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -503,6 +506,9 @@ impl TryFrom<usize> for Syscall {
             117 => Ok(Syscall::EpollCreate1),
             118 => Ok(Syscall::EpollCtl),
             119 => Ok(Syscall::EpollWait),
+            120 => Ok(Syscall::Clone),
+            121 => Ok(Syscall::Gettid),
+            122 => Ok(Syscall::ExitGroup),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -636,6 +642,9 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::EpollCreate1 => sys_epoll_create1(&args),
             Syscall::EpollCtl => sys_epoll_ctl(&args),
             Syscall::EpollWait => sys_epoll_wait(&args),
+            Syscall::Clone => sys_clone(&args),
+            Syscall::Gettid => sys_gettid(&args),
+            Syscall::ExitGroup => sys_exit_group(&args),
         },
         Err(e) => Err(e),
     };

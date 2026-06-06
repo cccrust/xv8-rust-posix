@@ -377,6 +377,19 @@ pub mod raw {
         syscall4(Syscall::EpollWait, epfd, events as usize, max_events, timeout as usize)
     }
 
+    pub fn clone(flags: usize, stack: usize) -> isize {
+        syscall2(Syscall::Clone, flags, stack)
+    }
+
+    pub fn gettid() -> isize {
+        syscall0(Syscall::Gettid)
+    }
+
+    pub fn exit_group(code: usize) -> ! {
+        syscall1(Syscall::ExitGroup, code);
+        unreachable!();
+    }
+
     pub fn getpgid(pid: usize) -> isize {
         syscall1(Syscall::Getpgid, pid)
     }
@@ -935,4 +948,16 @@ pub fn epoll_ctl(epfd: Fd, op: usize, fd: Fd, event: Option<&kernel::abi::EpollE
 
 pub fn epoll_wait(epfd: Fd, events: &mut [kernel::abi::EpollEvent], timeout: isize) -> Result<usize, SysError> {
     check(raw::epoll_wait(epfd.as_raw(), events.as_mut_ptr(), events.len(), timeout))
+}
+
+pub fn clone(flags: usize, stack: usize) -> Result<usize, SysError> {
+    check(raw::clone(flags, stack))
+}
+
+pub fn gettid() -> usize {
+    raw::gettid() as usize
+}
+
+pub fn exit_group(code: usize) -> ! {
+    raw::exit_group(code)
 }

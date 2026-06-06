@@ -343,6 +343,8 @@ pub struct ProcInner {
     pub xstate: isize,
     /// Process ID
     pub pid: Pid,
+    /// Thread group ID (same as pid for group leader, same as leader's pid for threads)
+    pub tgid: Pid,
 }
 
 impl ProcInner {
@@ -353,6 +355,7 @@ impl ProcInner {
             killed: false,
             xstate: 0,
             pid: Pid(0),
+            tgid: Pid(0),
         }
     }
 }
@@ -905,6 +908,7 @@ pub fn fork() -> Result<Pid, KernelError> {
     new_data.mmap_next = VA::new(crate::param::MMAP_BASE);
 
     let pid = new_inner.pid;
+    new_inner.tgid = pid; // fork creates a new thread group leader
 
     // drop new proc's lock here
     drop(new_inner);
@@ -912,6 +916,96 @@ pub fn fork() -> Result<Pid, KernelError> {
     {
         let mut parents = PROC_TABLE.parents.lock();
         parents[new_proc.id] = Some(proc.id);
+    }
+
+    // re-acquire new proc's lock
+    let mut new_inner = new_proc.inner.lock();
+    new_inner.state = ProcState::Runnable;
+
+    Ok(pid)
+}
+
+/// Clone a process (thread creation via `clone()` syscall).
+///
+/// When `CLONE_VM` (0x100) is set, the child shares the parent's page table.
+/// When `CLONE_THREAD` (0x10000) is set, the child belongs to the same thread group.
+///
+/// The child stack is set to `stack` if non-zero.
+pub fn clone_proc(flags: usize, stack: usize) -> Result<Pid, KernelError> {
+    let (proc, data) = current_proc_and_data_mut();
+
+    // allocate and setup new user process
+    let (new_proc, mut new_inner) = try_log!(PROC_TABLE.alloc());
+    new_inner = try_log!(new_proc.setup_user(new_inner));
+
+    // # Safety: new_proc is not yet runnable, so we are the only ones with access to it
+    let new_data = unsafe { new_proc.data_mut() };
+
+    let share_vm = (flags & 0x100) != 0; // CLONE_VM
+    let share_thread_group = (flags & 0x10000) != 0; // CLONE_THREAD
+
+    let size = data.size;
+
+    if share_vm {
+        // CLONE_VM: share physical pages but keep separate page tables.
+        // This allows each thread to have its own trapframe mapping while
+        // sharing all user memory (text, data, heap, stack) with the parent.
+        let size = data.size;
+        if let Err(err) = log!(new_data.pagetable_mut().share_memory(data.pagetable(), size)) {
+            new_proc.free(new_inner);
+            return Err(err.into());
+        }
+        new_data.size = size;
+    } else {
+        let new_pagetable = new_data.pagetable_mut();
+        if let Err(err) = log!(data.pagetable_mut().copy(new_pagetable, size)) {
+            new_proc.free(new_inner);
+            return Err(err.into());
+        };
+        new_data.size = size;
+    }
+
+    // copy saved user registers
+    let new_trapframe = new_data.trapframe_mut();
+    let trapframe = data.trapframe();
+    new_trapframe.clone_from(trapframe);
+
+    // cause clone to return 0 in the child
+    new_trapframe.a0 = 0;
+
+    // set child stack if provided
+    if stack != 0 {
+        new_trapframe.sp = stack;
+    }
+
+    // inherit name
+    new_data.name = data.name.clone();
+
+    // set thread group
+    let parent_inner = proc.inner.lock();
+    let parent_tgid = *parent_inner.tgid;
+    drop(parent_inner);
+
+    if share_thread_group {
+        // SAFETY: parent's tgid is a valid allocated PID
+        new_inner.tgid = unsafe { Pid::from_usize(parent_tgid) };
+    } else {
+        new_inner.tgid = new_inner.pid;
+    }
+
+    let pid = new_inner.pid;
+
+    // drop new proc's lock here
+    drop(new_inner);
+
+    {
+        let mut parents = PROC_TABLE.parents.lock();
+        if share_thread_group {
+            // thread shares parent with its thread group leader
+            parents[new_proc.id] = parents[proc.id];
+        } else {
+            parents[new_proc.id] = Some(proc.id);
+        }
     }
 
     // re-acquire new proc's lock
@@ -972,6 +1066,38 @@ pub fn exit(status: isize) -> ! {
     sched(inner, &mut data.context);
 
     unreachable!("zombie exit");
+}
+
+/// Exits all threads in the current thread group (`exit_group` syscall).
+///
+/// Sets the `killed` flag on sibling threads so the scheduler will stop
+/// scheduling them, then calls `exit()` on the current thread.
+pub fn exit_group(status: isize) -> ! {
+    let (proc, data) = current_proc_and_data_mut();
+    let tgid;
+
+    {
+        let inner = proc.inner.lock();
+        tgid = inner.tgid;
+        drop(inner);
+    }
+
+    // Kill all other threads in the same thread group
+    for p in PROC_TABLE.iter() {
+        if p.id == proc.id {
+            continue;
+        }
+        let mut pinner = p.inner.lock();
+        if pinner.state != ProcState::Unused && pinner.tgid == tgid {
+            pinner.killed = true;
+            if pinner.state == ProcState::Sleeping {
+                pinner.state = ProcState::Runnable;
+            }
+        }
+        drop(pinner);
+    }
+
+    exit(status)
 }
 
 /// Waits for a child process to exit and return its pid or None if there are no children.
