@@ -13,6 +13,12 @@ const ALL_TESTS: &[&str] = &[
     "/_eventfd",
     "/_memfd_create",
     "/_pidfd",
+    "/_splice",
+    "/_getrandom",
+    "/_close_range",
+    "/_inotify",
+    "/_signalfd",
+    "/_timerfd",
 ];
 
 static mut FILTER_BUF: [u8; 256] = [0; 256];

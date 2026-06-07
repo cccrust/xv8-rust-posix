@@ -126,6 +126,15 @@ fn fd_readiness(fd: usize) -> (bool, bool) {
             let alive = crate::pidfd::pidfd_is_alive(*pidfd_id);
             (!alive, false)
         }
+        FileType::Inotify { inotify_id } => {
+            crate::inotify::inotify_readiness(*inotify_id)
+        }
+        FileType::Signalfd { signalfd_id } => {
+            crate::signalfd::signalfd_readiness(*signalfd_id)
+        }
+        FileType::TimerFd { timerfd_id } => {
+            crate::timerfd::timerfd_readiness(*timerfd_id)
+        }
         FileType::None => (false, false),
     }
 }

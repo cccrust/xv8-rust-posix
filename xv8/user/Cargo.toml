@@ -243,6 +243,48 @@ test = false
 doctest = false
 bench = false
 
+[[bin]]
+name = "_splice"
+path = "testbin/splice.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_getrandom"
+path = "testbin/getrandom.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_close_range"
+path = "testbin/close_range.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_inotify"
+path = "testbin/inotify.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_signalfd"
+path = "testbin/signalfd.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_timerfd"
+path = "testbin/timerfd.rs"
+test = false
+doctest = false
+bench = false
+
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
 xv8-tokio-compat = { path = "../../xv8rust/xv8-tokio-compat" }

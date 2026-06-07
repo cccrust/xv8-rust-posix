@@ -168,6 +168,68 @@ impl Pipe {
         Ok(i)
     }
 
+    /// Write from a kernel buffer directly into the pipe (no user-space VA)
+    pub fn write_kernel(&self, buf: &[u8]) -> Result<usize, SysError> {
+        let (proc, _data) = current_proc_and_data_mut();
+
+        let mut inner = self.inner.lock();
+
+        let mut i = 0;
+        while i < buf.len() {
+            if proc.is_killed() {
+                err!(SysError::Interrupted);
+            }
+            if !inner.read_open {
+                err!(SysError::BrokenPipe);
+            }
+
+            if inner.num_write == inner.num_read + PIPESIZE {
+                proc::wakeup(Channel::PipeRead(self.pipe_id()));
+                inner = proc::sleep(Channel::PipeWrite(self.pipe_id()), inner);
+            } else {
+                let index = inner.num_write % PIPESIZE;
+                inner.data[index] = buf[i];
+                inner.num_write += 1;
+                i += 1;
+            }
+        }
+
+        proc::wakeup(Channel::PipeRead(self.pipe_id()));
+
+        Ok(i)
+    }
+
+    /// Read from pipe directly into a kernel buffer (no user-space VA)
+    pub fn read_kernel(&self, buf: &mut [u8]) -> Result<usize, SysError> {
+        let (proc, _data) = current_proc_and_data_mut();
+
+        let mut inner = self.inner.lock();
+
+        let mut i = 0;
+
+        while inner.num_read == inner.num_write && inner.write_open {
+            if proc.is_killed() {
+                err!(SysError::Interrupted);
+            }
+
+            inner = proc::sleep(Channel::PipeRead(self.pipe_id()), inner);
+        }
+
+        while i < buf.len() {
+            if inner.num_read == inner.num_write {
+                break;
+            }
+
+            buf[i] = inner.data[inner.num_read % PIPESIZE];
+            inner.num_read += 1;
+            i += 1;
+        }
+
+        proc::wakeup(Channel::PipeWrite(self.pipe_id()));
+
+        Ok(i)
+    }
+
     /// Reads from the pipe into the user space
     pub fn read(&self, addr: VA, n: usize) -> Result<usize, SysError> {
         let (proc, data) = current_proc_and_data_mut();

@@ -30,6 +30,9 @@ pub enum FileType {
     EventFd { eventfd_id: usize },
     MemFd { memfd_id: usize },
     PidFd { pidfd_id: usize },
+    Inotify { inotify_id: usize },
+    Signalfd { signalfd_id: usize },
+    TimerFd { timerfd_id: usize },
 }
 
 /// File metadata protected by table-wide spinlock
@@ -102,6 +105,15 @@ impl File {
         err!(FsError::OutOfFile);
     }
 
+    /// Returns the pipe Arc if this file is a pipe
+    pub fn get_pipe(&self) -> Result<alloc::sync::Arc<crate::pipe::Pipe>, SysError> {
+        let inner = FILE_TABLE.inner[self.id].lock();
+        match &inner.r#type {
+            FileType::Pipe { pipe } => Ok(pipe.clone()),
+            _ => err!(SysError::BadDescriptor),
+        }
+    }
+
     /// Incremets the reference count for the file.
     pub fn dup(&self) -> Self {
         let meta = &mut FILE_TABLE.meta.lock()[self.id];
@@ -162,6 +174,15 @@ match inner_copy.r#type {
                 crate::memfd::free_memfd_id(memfd_id);
             }
             FileType::PidFd { .. } => {}
+            FileType::Inotify { inotify_id } => {
+                crate::inotify::free_inotify_id(inotify_id);
+            }
+            FileType::Signalfd { signalfd_id } => {
+                crate::signalfd::free_signalfd_id(signalfd_id);
+            }
+            FileType::TimerFd { timerfd_id } => {
+                crate::timerfd::free_timerfd_id(timerfd_id);
+            }
          }
     }
 
@@ -274,6 +295,51 @@ match inner_copy.r#type {
             FileType::PidFd { .. } => {
                 err!(SysError::BadDescriptor);
             }
+            FileType::Inotify { inotify_id } => {
+                let inotify_id = *inotify_id;
+                let mut buf = alloc::vec![0u8; n];
+                drop(file_inner);
+                let read_n = log!(crate::inotify::inotify_read(inotify_id, &mut buf));
+                if let Ok(n) = read_n {
+                    if n > 0 && log!(crate::proc::copy_to_user(&buf[..n], addr)).is_err() {
+                        err!(SysError::BadAddress);
+                    }
+                    Ok(n)
+                } else {
+                    Err(read_n.unwrap_err())
+                }
+            }
+            FileType::Signalfd { signalfd_id } => {
+                let signalfd_id = *signalfd_id;
+                let mut buf = alloc::vec![0u8; n];
+                drop(file_inner);
+                let read_n = log!(crate::signalfd::signalfd_read(signalfd_id, &mut buf));
+                if let Ok(n) = read_n {
+                    if n > 0 && log!(crate::proc::copy_to_user(&buf[..n], addr)).is_err() {
+                        err!(SysError::BadAddress);
+                    }
+                    Ok(n)
+                } else {
+                    Err(read_n.unwrap_err())
+                }
+            }
+            FileType::TimerFd { timerfd_id } => {
+                let timerfd_id = *timerfd_id;
+                let nonblock = file_inner.nonblocking;
+                drop(file_inner);
+                let val = log!(crate::timerfd::timerfd_read(timerfd_id, nonblock));
+                if let Ok(v) = val {
+                    let val_bytes = v.to_ne_bytes();
+                    let copy_len = n.min(val_bytes.len());
+                    let mut file_inner = FILE_TABLE.inner[self.id].lock();
+                    if log!(crate::proc::copy_to_user(&val_bytes[..copy_len], addr)).is_err() {
+                        err!(SysError::BadAddress);
+                    }
+                    Ok(copy_len)
+                } else {
+                    Err(val.unwrap_err())
+                }
+            }
         }
     }
 
@@ -324,6 +390,7 @@ match inner_copy.r#type {
                 }
 
                 if i == n {
+                    crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_MODIFY, 0, "");
                     Ok(n)
                 } else {
                     err!(SysError::IoError);
@@ -374,6 +441,15 @@ match inner_copy.r#type {
             FileType::PidFd { .. } => {
                 err!(SysError::BadDescriptor);
             }
+            FileType::Inotify { .. } => {
+                err!(SysError::BadDescriptor);
+            }
+            FileType::Signalfd { .. } => {
+                err!(SysError::BadDescriptor);
+            }
+            FileType::TimerFd { .. } => {
+                err!(SysError::BadDescriptor);
+            }
         }
     }
 
@@ -409,7 +485,7 @@ match inner_copy.r#type {
 
          match &file_inner.r#type {
              FileType::None => err!(SysError::BadDescriptor),
-              FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } | FileType::Epoll { .. } | FileType::EventFd { .. } | FileType::PidFd { .. } => err!(SysError::IsDirectory),
+               FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } | FileType::Epoll { .. } | FileType::EventFd { .. } | FileType::PidFd { .. } | FileType::Inotify { .. } | FileType::Signalfd { .. } | FileType::TimerFd { .. } => err!(SysError::IsDirectory),
              FileType::Inode { .. } | FileType::Device { .. } | FileType::MemFd { .. } => {
                 let new_offset = match whence {
                     0 => { // SEEK_SET
@@ -483,6 +559,7 @@ match inner_copy.r#type {
                 inode_inner.mode = (inode_inner.mode & !0o777) | (mode & 0o777);
                 inode.update(&inode_inner);
                 inode.unlock(inode_inner);
+                crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_ATTRIB, 0, "");
                 Ok(())
             }
             FileType::Epoll { .. } => err!(SysError::BadDescriptor),
@@ -501,6 +578,7 @@ match inner_copy.r#type {
                 inode_inner.gid = gid;
                 inode.update(&inode_inner);
                 inode.unlock(inode_inner);
+                crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_ATTRIB, 0, "");
                 Ok(())
             }
             FileType::Epoll { .. } => err!(SysError::BadDescriptor),

@@ -57,12 +57,12 @@ pub const NEPOLL: usize = 16;
 
 /// max eventfd instances per system
 pub const NEVENTFD: usize = 16;
-
-/// max memfd instances per system
 pub const NMEMFD: usize = 16;
-
-/// max pidfd instances per system
 pub const NPIDFD: usize = 16;
+pub const NINOTIFY: usize = 16;
+pub const NINOTIFY_WATCHES: usize = 64;
+pub const NSIGNALFD: usize = 16;
+pub const NTIMERFD: usize = 16;
 
 /// max mmap regions per process
 pub const MMAP_REGIONS: usize = 16;

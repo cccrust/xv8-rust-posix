@@ -311,6 +311,12 @@ pub enum Channel {
     Address(usize),
     /// eventfd notification
     EventFd(usize),
+    /// inotify notification
+    Inotify(usize),
+    /// signalfd notification (wakeup keyed by PID)
+    Signalfd(usize),
+    /// periodic timer tick for timerfd
+    TimerTick,
 }
 
 /// Process control block

@@ -168,7 +168,10 @@ pub fn sys_link(args: &SyscallArgs) -> Result<usize, SysError> {
             err!(SysError::from(e));
         }
 
+        let parent_dev = parent.dev;
+        let parent_inum = parent.inum;
         parent.unlock_put(parent_inner);
+        crate::inotify::notify(parent_dev, parent_inum, crate::inotify::IN_CREATE, 0, &name);
         Ok(0)
     })();
 
@@ -239,12 +242,16 @@ pub fn sys_unlink(args: &SyscallArgs) -> Result<usize, SysError> {
         parent_inner.nlink -= 1;
         parent.update(&parent_inner);
     }
+    let parent_dev = parent.dev;
+    let parent_inum = parent.inum;
     parent.unlock_put(parent_inner);
 
     // decrement the inode's link count
     inode_inner.nlink -= 1;
     inode.update(&inode_inner);
     inode.unlock_put(inode_inner);
+
+    crate::inotify::notify(parent_dev, parent_inum, crate::inotify::IN_DELETE, 0, &name);
 
     Ok(0)
 }
@@ -266,6 +273,10 @@ pub fn sys_open(args: &SyscallArgs) -> Result<usize, SysError> {
                 err!(SysError::from(e))
             }
         };
+        if let Ok((parent, child_name)) = path.resolve_parent() {
+            crate::inotify::notify(parent.dev, parent.inum, crate::inotify::IN_CREATE, 0, &child_name);
+            parent.put();
+        }
     } else {
         inode = match log!(path.resolve()) {
             Ok(i) => i,
@@ -347,9 +358,12 @@ pub fn sys_open(args: &SyscallArgs) -> Result<usize, SysError> {
 
     if (o_mode & OpenFlag::TRUNCATE) != 0 && inode_inner.r#type == InodeType::File {
         inode.trunc(&mut inode_inner);
+        crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_MODIFY, 0, "");
     }
 
     inode.unlock(inode_inner);
+
+    crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_OPEN, 0, "");
 
     Ok(fd)
 }
@@ -364,6 +378,11 @@ pub fn sys_mkdir(args: &SyscallArgs) -> Result<usize, SysError> {
             Ok(i) => i,
             Err(e) => err!(SysError::from(e)),
         };
+
+    if let Ok((parent, child_name)) = Path::new(&path).resolve_parent() {
+        crate::inotify::notify(parent.dev, parent.inum, crate::inotify::IN_CREATE | crate::inotify::IN_ISDIR, 0, &child_name);
+        parent.put();
+    }
 
     inode.unlock_put(inode_inner);
 
@@ -544,8 +563,11 @@ pub fn sys_truncate(args: &SyscallArgs) -> Result<usize, SysError> {
         f
     };
 
+    let inode_dev = inode.dev;
+    let inode_inum = inode.inum;
     drop(inode);
     log!(file.truncate(0))?;
+    crate::inotify::notify(inode_dev, inode_inum, crate::inotify::IN_MODIFY, 0, "");
     file.close();
     Ok(0)
 }
@@ -553,6 +575,11 @@ pub fn sys_truncate(args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_ftruncate(args: &SyscallArgs) -> Result<usize, SysError> {
     let (_, file) = try_log!(args.get_file(0));
     log!(file.truncate(0))?;
+    let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    if let crate::file::FileType::Inode { inode } = &inner.r#type {
+        crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_MODIFY, 0, "");
+    }
+    drop(inner);
     Ok(0)
 }
 
@@ -581,8 +608,11 @@ pub fn sys_chmod(args: &SyscallArgs) -> Result<usize, SysError> {
         f
     };
 
+    let inode_dev = inode.dev;
+    let inode_inum = inode.inum;
     drop(inode);
     log!(file.chmod(mode))?;
+    crate::inotify::notify(inode_dev, inode_inum, crate::inotify::IN_ATTRIB, 0, "");
     file.close();
     Ok(0)
 }
@@ -591,6 +621,11 @@ pub fn sys_fchmod(args: &SyscallArgs) -> Result<usize, SysError> {
     let (_, file) = try_log!(args.get_file(0));
     let mode = args.get_int(1) as u16;
     log!(file.chmod(mode))?;
+    let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    if let crate::file::FileType::Inode { inode } = &inner.r#type {
+        crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_ATTRIB, 0, "");
+    }
+    drop(inner);
     Ok(0)
 }
 
@@ -620,8 +655,11 @@ pub fn sys_chown(args: &SyscallArgs) -> Result<usize, SysError> {
         f
     };
 
+    let inode_dev = inode.dev;
+    let inode_inum = inode.inum;
     drop(inode);
     log!(file.chown(uid, gid))?;
+    crate::inotify::notify(inode_dev, inode_inum, crate::inotify::IN_ATTRIB, 0, "");
     file.close();
     Ok(0)
 }
@@ -631,6 +669,11 @@ pub fn sys_fchown(args: &SyscallArgs) -> Result<usize, SysError> {
     let uid = args.get_int(1) as u16;
     let gid = args.get_int(2) as u16;
     log!(file.chown(uid, gid))?;
+    let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    if let crate::file::FileType::Inode { inode } = &inner.r#type {
+        crate::inotify::notify(inode.dev, inode.inum, crate::inotify::IN_ATTRIB, 0, "");
+    }
+    drop(inner);
     Ok(0)
 }
 
@@ -685,23 +728,25 @@ pub fn sys_rename(args: &SyscallArgs) -> Result<usize, SysError> {
         err!(SysError::from(e));
     }
 
+    let cookie = old_inode.inum;
+    let parent_new_dev = parent_new.dev;
+    let parent_new_inum = parent_new.inum;
     parent_new.unlock_put(parent_new_inner);
 
     drop(old_inode);
 
-    // TODO: name_old needed for proper unlink after rename is fully implemented
-    #[allow(unused_variables)]
-    let (name_old, _) = match log!(Path::new(&old).resolve_parent()) {
-        Ok(v) => v,
+    let name_old_str = match log!(Path::new(&old).resolve_parent()) {
+        Ok((_, n)) => n,
         Err(_) => err!(SysError::NoEntry),
     };
-    let _ = name_old; // suppress warning until used
 
     let parent_old = match log!(Path::new(&old).resolve_parent()) {
         Ok((p, _)) => p,
         Err(_) => err!(SysError::NoEntry),
     };
 
+    let parent_old_dev = parent_old.dev;
+    let parent_old_inum = parent_old.inum;
     let mut parent_old_inner = parent_old.lock();
 
     let dir = Directory::new_empty();
@@ -711,6 +756,9 @@ pub fn sys_rename(args: &SyscallArgs) -> Result<usize, SysError> {
     }
 
     parent_old.unlock_put(parent_old_inner);
+
+    crate::inotify::notify(parent_new_dev, parent_new_inum, crate::inotify::IN_MOVED_TO, cookie, &name_new);
+    crate::inotify::notify(parent_old_dev, parent_old_inum, crate::inotify::IN_MOVED_FROM, cookie, &name_old_str);
 
     Ok(0)
 }
@@ -818,7 +866,10 @@ pub fn sys_utimensat(args: &SyscallArgs) -> Result<usize, SysError> {
         inode.update(&inode_inner);
     }
 
+    let inode_dev = inode.dev;
+    let inode_inum = inode.inum;
     inode.put();
+    crate::inotify::notify(inode_dev, inode_inum, crate::inotify::IN_ATTRIB, 0, "");
     Ok(0)
 }
 
@@ -1025,4 +1076,146 @@ pub fn sys_mkfifo(args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_pipe2(args: &SyscallArgs) -> Result<usize, SysError> {
     let _flags = args.get_int(0) as usize;
     sys_pipe(args)
+}
+
+/// splice(fd_in, off_in, fd_out, off_out, len, flags)
+/// Move data between two file descriptors without going through user space.
+/// At least one FD must be a pipe.
+pub fn sys_splice(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _fd_in_val = args.get_int(0);
+    let _off_in = args.get_addr(1);
+    let _fd_out_val = args.get_int(2);
+    let _off_out = args.get_addr(3);
+    let len = args.get_int(4) as usize;
+    let _flags = args.get_int(5) as u32;
+
+    let (_, file_in) = try_log!(args.get_file(0));
+    let (_, mut file_out) = try_log!(args.get_file(2));
+
+    let pipe_in = file_in.get_pipe();
+    let pipe_out = file_out.get_pipe();
+
+    // If both are pipes: read from src, write to dst via kernel buffer
+    if let Ok(in_pipe) = pipe_in {
+        if let Ok(out_pipe) = pipe_out {
+            let mut buf = vec![0u8; len];
+            let n = try_log!(in_pipe.read_kernel(&mut buf));
+            if n == 0 {
+                return Ok(0);
+            }
+            let written = try_log!(out_pipe.write_kernel(&buf[..n]));
+            return Ok(written);
+        }
+        // pipe → non-pipe: read from pipe, write to other fd
+        let mut buf = vec![0u8; len];
+        let n = try_log!(in_pipe.read_kernel(&mut buf));
+        if n == 0 {
+            return Ok(0);
+        }
+        // Allocate a page to serve as user-space VA for file_out.write
+        let page = try_log!(crate::kalloc::alloc_page().ok_or(SysError::ResourceUnavailable));
+        let va = page as usize;
+        unsafe {
+            core::ptr::copy_nonoverlapping(buf.as_ptr(), va as *mut u8, n);
+        }
+        let result = file_out.write(VA::from(va), n);
+        unsafe { core::ptr::write_volatile(page, 0); }
+        crate::kalloc::free_page(page);
+        return result;
+    }
+    if let Ok(out_pipe) = pipe_out {
+        // non-pipe → pipe: read from other fd, write to pipe
+        let page = try_log!(crate::kalloc::alloc_page().ok_or(SysError::ResourceUnavailable));
+        let va = VA::from(page as usize);
+        let n = try_log!(file_in.read(va, len));
+        if n == 0 {
+            unsafe { core::ptr::write_volatile(page, 0); }
+            crate::kalloc::free_page(page);
+            return Ok(0);
+        }
+        let mut buf = vec![0u8; n];
+        unsafe {
+            core::ptr::copy_nonoverlapping(page as *const u8, buf.as_mut_ptr(), n);
+        }
+        let written = try_log!(out_pipe.write_kernel(&buf));
+        unsafe { core::ptr::write_volatile(page, 0); }
+        crate::kalloc::free_page(page);
+        return Ok(written);
+    }
+    Err(SysError::BadDescriptor)
+}
+
+/// tee(fd_in, fd_out, len, flags)
+/// Copy data between two pipes. Data is consumed from fd_in.
+pub fn sys_tee(args: &SyscallArgs) -> Result<usize, SysError> {
+    let len = args.get_int(2) as usize;
+    let _flags = args.get_int(3) as u32;
+
+    let (_, file_in) = try_log!(args.get_file(0));
+    let (_, file_out) = try_log!(args.get_file(1));
+
+    let in_pipe = try_log!(file_in.get_pipe());
+    let out_pipe = try_log!(file_out.get_pipe());
+
+    let mut buf = vec![0u8; len];
+    let n = try_log!(in_pipe.read_kernel(&mut buf));
+    if n == 0 {
+        return Ok(0);
+    }
+    let written = try_log!(out_pipe.write_kernel(&buf[..n]));
+    Ok(written)
+}
+
+/// vmsplice(fd, iov, nr_segs, flags)
+/// Copy user pages to a pipe.
+pub fn sys_vmsplice(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _fd_val = args.get_int(0);
+    let iov_addr = args.get_addr(1);
+    let nr_segs = args.get_int(2) as usize;
+    let _flags = args.get_int(3) as u32;
+
+    let (_, file) = try_log!(args.get_file(0));
+    let pipe = try_log!(file.get_pipe());
+
+    let (_proc, data) = current_proc_and_data_mut();
+    let pt = data.pagetable_mut();
+
+    let mut total = 0;
+
+    for i in 0..nr_segs {
+        if total >= 32768 {
+            break;
+        }
+        let iovec_addr = iov_addr + i * 16;
+        let mut buf_ptr_bytes = [0u8; 8];
+        let mut buf_len_bytes = [0u8; 8];
+        if pt.copy_from(iovec_addr, &mut buf_ptr_bytes).is_err() {
+            break;
+        }
+        if pt.copy_from(iovec_addr + 8, &mut buf_len_bytes).is_err() {
+            break;
+        }
+        let buf_ptr = usize::from_le_bytes(buf_ptr_bytes);
+        let buf_len = usize::from_le_bytes(buf_len_bytes);
+
+        if buf_ptr == 0 || buf_len == 0 {
+            continue;
+        }
+
+        let len = buf_len.min(32768 - total);
+        let mut buf = vec![0u8; len];
+        if pt.copy_from(VA::from(buf_ptr), &mut buf).is_err() {
+            break;
+        }
+        let n = try_log!(pipe.write_kernel(&buf));
+        total += n;
+        if n < len {
+            break;
+        }
+    }
+
+    if total == 0 {
+        err!(SysError::BadAddress);
+    }
+    Ok(total)
 }

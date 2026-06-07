@@ -478,6 +478,54 @@ pub mod raw {
     pub fn pidfd_open(pid: usize, flags: usize) -> isize {
         syscall2(Syscall::PidFdOpen, pid, flags)
     }
+
+    pub fn splice(fd_in: usize, off_in: *const i64, fd_out: usize, off_out: *const i64, len: usize, flags: u32) -> isize {
+        syscall6(Syscall::Splice, fd_in, off_in as usize, fd_out, off_out as usize, len, flags as usize)
+    }
+
+    pub fn tee(fd_in: usize, fd_out: usize, len: usize, flags: u32) -> isize {
+        syscall4(Syscall::Tee, fd_in, fd_out, len, flags as usize)
+    }
+
+    pub fn vmsplice(fd: usize, iov: usize, nr_segs: usize, flags: u32) -> isize {
+        syscall4(Syscall::Vmsplice, fd, iov, nr_segs, flags as usize)
+    }
+
+    pub fn getrandom(buf: *mut u8, len: usize, flags: u32) -> isize {
+        syscall3(Syscall::GetRandom, buf as usize, len, flags as usize)
+    }
+
+    pub fn close_range(first: usize, last: usize, flags: u32) -> isize {
+        syscall3(Syscall::CloseRange, first, last, flags as usize)
+    }
+
+    pub fn inotify_init1(flags: u32) -> isize {
+        syscall1(Syscall::InotifyInit1, flags as usize)
+    }
+
+    pub fn inotify_add_watch(fd: usize, pathname: *const u8, mask: u32) -> isize {
+        syscall3(Syscall::InotifyAddWatch, fd, pathname as usize, mask as usize)
+    }
+
+    pub fn inotify_rm_watch(fd: usize, wd: i32) -> isize {
+        syscall2(Syscall::InotifyRmWatch, fd, wd as usize)
+    }
+
+    pub fn signalfd4(fd: usize, mask: *const u32, sizemask: usize, flags: u32) -> isize {
+        syscall4(Syscall::Signalfd4, fd, mask as usize, sizemask, flags as usize)
+    }
+
+    pub fn timerfd_create(clockid: i32, flags: u32) -> isize {
+        syscall2(Syscall::TimerFdCreate, clockid as usize, flags as usize)
+    }
+
+    pub fn timerfd_settime(fd: usize, flags: u32, new_val: usize, old_val: usize) -> isize {
+        syscall4(Syscall::TimerFdSettime, fd, flags as usize, new_val, old_val)
+    }
+
+    pub fn timerfd_gettime(fd: usize, curr_val: usize) -> isize {
+        syscall2(Syscall::TimerFdGettime, fd, curr_val)
+    }
 }
 
 use kernel::abi::{MAXPATH, Stat, SysError};
@@ -975,6 +1023,14 @@ pub fn epoll_wait(epfd: Fd, events: &mut [kernel::abi::EpollEvent], timeout: isi
     check(raw::epoll_wait(epfd.as_raw(), events.as_mut_ptr(), events.len(), timeout))
 }
 
+pub fn splice(fd_in: Fd, off_in: *const i64, fd_out: Fd, off_out: *const i64, len: usize, flags: u32) -> Result<usize, SysError> {
+    check(raw::splice(fd_in.as_raw(), off_in, fd_out.as_raw(), off_out, len, flags))
+}
+
+pub fn tee(fd_in: Fd, fd_out: Fd, len: usize, flags: u32) -> Result<usize, SysError> {
+    check(raw::tee(fd_in.as_raw(), fd_out.as_raw(), len, flags))
+}
+
 pub fn clone(flags: usize, stack: usize) -> Result<usize, SysError> {
     check(raw::clone(flags, stack))
 }
@@ -992,4 +1048,34 @@ pub fn gettid() -> usize {
 
 pub fn exit_group(code: usize) -> ! {
     raw::exit_group(code)
+}
+
+pub fn inotify_init1(flags: u32) -> Result<Fd, SysError> {
+    check(raw::inotify_init1(flags)).map(Fd)
+}
+
+pub fn inotify_add_watch(fd: Fd, path: &str, mask: u32) -> Result<i32, SysError> {
+    let cpath = validate_path(path)?;
+    let ret = raw::inotify_add_watch(fd.as_raw(), cpath.as_ptr(), mask);
+    if ret >= 0 { Ok(ret as i32) } else { Err(SysError::from_code((-ret) as u16)) }
+}
+
+pub fn inotify_rm_watch(fd: Fd, wd: i32) -> Result<(), SysError> {
+    check_unit(raw::inotify_rm_watch(fd.as_raw(), wd))
+}
+
+pub fn signalfd4(mask: u32, flags: u32) -> Result<Fd, SysError> {
+    check(raw::signalfd4(0, &mask as *const u32, core::mem::size_of::<u32>(), flags)).map(Fd)
+}
+
+pub fn timerfd_create(clockid: i32, flags: u32) -> Result<Fd, SysError> {
+    check(raw::timerfd_create(clockid, flags)).map(Fd)
+}
+
+pub fn timerfd_settime(fd: Fd, flags: u32, new_val: usize) -> Result<(), SysError> {
+    check_unit(raw::timerfd_settime(fd.as_raw(), flags, new_val, 0))
+}
+
+pub fn timerfd_gettime(fd: Fd, curr_val: usize) -> Result<(), SysError> {
+    check_unit(raw::timerfd_gettime(fd.as_raw(), curr_val))
 }

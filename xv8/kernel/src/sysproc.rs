@@ -1054,8 +1054,10 @@ pub fn sys_killpg(args: &SyscallArgs) -> Result<usize, SysError> {
         let inner = p.inner.lock();
         if inner.state != crate::proc::ProcState::Unused {
             if *p.data().pgrp == pgrp {
+                let target_pid = *inner.pid;
                 drop(inner);
                 p.data().signals.send_signal(sig);
+                crate::signalfd::signalfd_notify(target_pid, sig);
                 found = true;
             } else {
                 drop(inner);
@@ -1206,17 +1208,96 @@ pub fn sys_eventfd2(args: &SyscallArgs) -> Result<usize, SysError> {
 }
 
 pub fn sys_timerfd_create(args: &SyscallArgs) -> Result<usize, SysError> {
-    let _clockid = args.get_int(0) as i32;
-    let _flags = args.get_int(1) as u32;
-    err!(SysError::NotImplemented)
+    let clockid = args.get_int(0) as i32;
+    let flags = args.get_int(1) as u32;
+
+    let timerfd_id = try_log!(crate::timerfd::alloc_timerfd_id(clockid, flags));
+
+    let file = try_log!(crate::file::File::alloc());
+    let fd = try_log!(crate::sysfile::fd_alloc(file.clone()));
+
+    let mut inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    inner.r#type = crate::file::FileType::TimerFd { timerfd_id };
+    inner.readable = true;
+    inner.writeable = true;
+    inner.offset = 0;
+
+    Ok(fd)
 }
 
 pub fn sys_timerfd_settime(args: &SyscallArgs) -> Result<usize, SysError> {
-    err!(SysError::NotImplemented)
+    let flags = args.get_int(1) as u32;
+    let new_val_addr = args.get_addr(2);
+    let old_val_addr = args.get_addr(3);
+
+    let (_, file) = try_log!(args.get_file(0));
+
+    let timerfd_id = {
+        let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+        match &inner.r#type {
+            crate::file::FileType::TimerFd { timerfd_id } => *timerfd_id,
+            _ => err!(SysError::BadDescriptor),
+        }
+    };
+
+    let mut new_val = crate::timerfd::Itimerspec::default();
+    let bytes = unsafe {
+        core::slice::from_raw_parts_mut(
+            &mut new_val as *mut _ as *mut u8,
+            core::mem::size_of::<crate::timerfd::Itimerspec>(),
+        )
+    };
+    let (_proc, data) = proc::current_proc_and_data_mut();
+    let pt = data.pagetable_mut();
+    if pt.copy_from(new_val_addr, bytes).is_err() {
+        err!(SysError::BadAddress);
+    }
+
+    let mut old_val = crate::timerfd::Itimerspec::default();
+    let ret = log!(crate::timerfd::timerfd_settime(timerfd_id, flags, &new_val, &mut old_val));
+
+    if old_val_addr.as_usize() != 0 && ret.is_ok() {
+        let old_bytes = unsafe {
+            core::slice::from_raw_parts(
+                &old_val as *const _ as *const u8,
+                core::mem::size_of::<crate::timerfd::Itimerspec>(),
+            )
+        };
+        let _ = pt.copy_to(old_bytes, old_val_addr);
+    }
+
+    ret.map(|_| 0)
 }
 
 pub fn sys_timerfd_gettime(args: &SyscallArgs) -> Result<usize, SysError> {
-    err!(SysError::NotImplemented)
+    let curr_addr = args.get_addr(1);
+
+    let (_, file) = try_log!(args.get_file(0));
+
+    let timerfd_id = {
+        let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+        match &inner.r#type {
+            crate::file::FileType::TimerFd { timerfd_id } => *timerfd_id,
+            _ => err!(SysError::BadDescriptor),
+        }
+    };
+
+    let mut curr = crate::timerfd::Itimerspec::default();
+    log!(crate::timerfd::timerfd_gettime(timerfd_id, &mut curr))?;
+
+    let bytes = unsafe {
+        core::slice::from_raw_parts(
+            &curr as *const _ as *const u8,
+            core::mem::size_of::<crate::timerfd::Itimerspec>(),
+        )
+    };
+    let (_proc, data) = proc::current_proc_and_data_mut();
+    let pt = data.pagetable_mut();
+    if pt.copy_to(bytes, curr_addr).is_err() {
+        err!(SysError::BadAddress);
+    }
+
+    Ok(0)
 }
 
 pub fn sys_memfd_create(args: &SyscallArgs) -> Result<usize, SysError> {
@@ -1289,4 +1370,122 @@ pub fn sys_futex(args: &SyscallArgs) -> Result<usize, SysError> {
         }
         _ => Err(SysError::NotImplemented),
     }
+}
+
+// ─── v4.4 stubs (to be implemented in subsequent versions) ───
+
+pub fn sys_getrandom(args: &SyscallArgs) -> Result<usize, SysError> {
+    let buf = args.get_addr(0);
+    let len = args.get_int(1) as usize;
+    let _flags = args.get_int(2) as u32;
+
+    if len == 0 {
+        return Ok(0);
+    }
+
+    let mut bytes = alloc::vec![0u8; len];
+    crate::rng::rand_bytes(&mut bytes);
+    let (_proc, data) = current_proc_and_data_mut();
+    if log!(data.pagetable_mut().copy_to(&bytes, buf)).is_err() {
+        err!(SysError::BadAddress);
+    }
+    Ok(len)
+}
+
+pub fn sys_close_range(args: &SyscallArgs) -> Result<usize, SysError> {
+    let first = args.get_int(0) as usize;
+    let last = args.get_int(1) as usize;
+    let _flags = args.get_int(2) as u32;
+
+    let last = last.min(crate::param::NOFILE - 1);
+    for fd in first..=last {
+        let data = proc::current_proc().data();
+        let mut files = data.open_files.as_ref().unwrap().files.lock();
+        if let Some(mut file) = files[fd].take() {
+            drop(files);
+            file.close();
+        }
+    }
+    Ok(0)
+}
+
+pub fn sys_prctl(_args: &SyscallArgs) -> Result<usize, SysError> {
+    Err(SysError::NotImplemented)
+}
+
+pub fn sys_inotify_init1(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _flags = args.get_int(0) as u32;
+    let inotify_id = try_log!(crate::inotify::alloc_inotify_id());
+    let file = try_log!(crate::file::File::alloc());
+    let fd = try_log!(crate::sysfile::fd_alloc(file.clone()));
+    let mut inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    inner.r#type = crate::file::FileType::Inotify { inotify_id };
+    inner.readable = true;
+    inner.writeable = false;
+    Ok(fd)
+}
+
+pub fn sys_inotify_add_watch(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let path_addr = args.get_addr(1);
+    let mask = args.get_int(2) as u32;
+    let path_str = try_log!(args.fetch_string(path_addr, crate::param::MAXPATH));
+    let path = crate::fs::Path::new(&path_str);
+    let inode = try_log!(log!(path.resolve()));
+    let inotify_id = {
+        let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+        match &inner.r#type {
+            crate::file::FileType::Inotify { inotify_id } => *inotify_id,
+            _ => err!(SysError::BadDescriptor),
+        }
+    };
+    let wd = try_log!(crate::inotify::inotify_add_watch(inotify_id, inode.dev, inode.inum, mask));
+    Ok(wd as usize)
+}
+
+pub fn sys_inotify_rm_watch(args: &SyscallArgs) -> Result<usize, SysError> {
+    let (_, file) = try_log!(args.get_file(0));
+    let wd = args.get_int(1) as i32;
+    let inotify_id = {
+        let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+        match &inner.r#type {
+            crate::file::FileType::Inotify { inotify_id } => *inotify_id,
+            _ => err!(SysError::BadDescriptor),
+        }
+    };
+    try_log!(crate::inotify::inotify_rm_watch(inotify_id, wd));
+    Ok(0)
+}
+
+pub fn sys_signalfd4(args: &SyscallArgs) -> Result<usize, SysError> {
+    let fd_hint = args.get_int(0) as usize;
+    let mask_addr = args.get_addr(1);
+    let sizemask = args.get_int(2) as usize;
+    let flags = args.get_int(3) as u32;
+
+    let mut mask = 0u32;
+    let (_proc, data) = current_proc_and_data_mut();
+    let copy_size = sizemask.min(8);
+    if copy_size > 0 {
+        let mut buf = [0u8; 8];
+        data.pagetable_mut()
+            .copy_from(mask_addr, &mut buf[..copy_size])
+            .map_err(|_| SysError::BadAddress)?;
+        mask = u32::from_ne_bytes(buf[..4].try_into().unwrap());
+    }
+
+    let pid = *_proc.inner.lock().pid;
+    let _ = fd_hint;
+    let signalfd_id = try_log!(crate::signalfd::alloc_signalfd_id(pid, mask));
+
+    let file = try_log!(crate::file::File::alloc());
+    let fd = try_log!(crate::sysfile::fd_alloc(file.clone()));
+
+    let mut inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    inner.r#type = crate::file::FileType::Signalfd { signalfd_id };
+    inner.readable = true;
+    inner.writeable = false;
+    inner.nonblocking = (flags & crate::signalfd::SFD_NONBLOCK) != 0;
+
+    Ok(fd)
 }

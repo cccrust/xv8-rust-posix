@@ -19,6 +19,10 @@ use crate::{e1000, plic};
 
 pub static TICKS: SpinLock<usize> = SpinLock::new(0, "time");
 
+pub fn current_ticks() -> u64 {
+    *TICKS.lock() as u64
+}
+
 /// Handles an interrupt, exception, or system call from user space.
 ///
 /// # Safety
@@ -170,6 +174,10 @@ fn is_fatal_signal(sig: usize) -> bool {
 
 /// Deliver pending signals before returning to user space.
 unsafe fn deliver_pending_signals(data: &mut crate::proc::ProcData) {
+    // Check if any signalfd matches pending signals
+    // If so, the signal is consumed by signalfd and not delivered to handler
+    let my_pid = *crate::proc::current_proc().inner.lock().pid;
+
     loop {
         let pending = data.signals.get_pending();
         let blocked = data.signals.get_blocked();
@@ -178,20 +186,15 @@ unsafe fn deliver_pending_signals(data: &mut crate::proc::ProcData) {
             break;
         }
         let sig = unblocked.trailing_zeros() as usize + 1;
+
+        // If a signalfd monitors this signal, consume it via signalfd
+        if crate::signalfd::signalfd_notify(my_pid, sig) {
+            data.signals.clear_signal(sig);
+            continue;
+        }
+
         let idx = sig - 1;
         let act = data.sigactions.as_ref().unwrap().lock()[idx];
-
-        // Read trapframe registers before any mutable access
-        let (tf_epc, tf_ra, tf_sp, tf_gp, tf_tp, tf_t0, tf_t1, tf_t2, tf_s0, tf_s1,
-             tf_a0, tf_a1, tf_a2, tf_a3, tf_a4, tf_a5, tf_a6, tf_a7,
-             tf_s2, tf_s3, tf_s4, tf_s5, tf_s6, tf_s7, tf_s8, tf_s9, tf_s10, tf_s11,
-             tf_t3, tf_t4, tf_t5, tf_t6) = {
-            let tf = data.trapframe();
-            (tf.epc, tf.ra, tf.sp, tf.gp, tf.tp, tf.t0, tf.t1, tf.t2, tf.s0, tf.s1,
-             tf.a0, tf.a1, tf.a2, tf.a3, tf.a4, tf.a5, tf.a6, tf.a7,
-             tf.s2, tf.s3, tf.s4, tf.s5, tf.s6, tf.s7, tf.s8, tf.s9, tf.s10, tf.s11,
-             tf.t3, tf.t4, tf.t5, tf.t6)
-        };
 
         data.signals.clear_signal(sig);
 
@@ -206,6 +209,18 @@ unsafe fn deliver_pending_signals(data: &mut crate::proc::ProcData) {
             }
             1 => {}
             _ => {
+                // Read trapframe registers before any mutable access
+                let (tf_epc, tf_ra, tf_sp, tf_gp, tf_tp, tf_t0, tf_t1, tf_t2, tf_s0, tf_s1,
+                     tf_a0, tf_a1, tf_a2, tf_a3, tf_a4, tf_a5, tf_a6, tf_a7,
+                     tf_s2, tf_s3, tf_s4, tf_s5, tf_s6, tf_s7, tf_s8, tf_s9, tf_s10, tf_s11,
+                     tf_t3, tf_t4, tf_t5, tf_t6) = {
+                    let tf = data.trapframe();
+                    (tf.epc, tf.ra, tf.sp, tf.gp, tf.tp, tf.t0, tf.t1, tf.t2, tf.s0, tf.s1,
+                     tf.a0, tf.a1, tf.a2, tf.a3, tf.a4, tf.a5, tf.a6, tf.a7,
+                     tf.s2, tf.s3, tf.s4, tf.s5, tf.s6, tf.s7, tf.s8, tf.s9, tf.s10, tf.s11,
+                     tf.t3, tf.t4, tf.t5, tf.t6)
+                };
+
                 let frame_size = core::mem::size_of::<signal::SigFrame>();
                 let frame_va = VA::new(tf_sp - frame_size);
 
@@ -395,6 +410,8 @@ pub fn clock_intr() {
         let mut ticks = TICKS.lock();
         *ticks += 1;
         proc::wakeup(Channel::Ticks);
+        drop(ticks);
+        crate::timerfd::tick();
     }
 
     unsafe { stimecmp::write(time::read() + 1_000_000) };
