@@ -18,8 +18,8 @@ pub fn sys_exit(args: &SyscallArgs) -> ! {
 }
 
 pub fn sys_getpid(args: &SyscallArgs) -> Result<usize, SysError> {
-    let pid = args.proc().inner.lock().pid;
-    Ok(*pid)
+    let tgid = args.proc().inner.lock().tgid;
+    Ok(*tgid)
 }
 
 pub fn sys_fork(_args: &SyscallArgs) -> Result<usize, SysError> {
@@ -881,7 +881,7 @@ pub fn sys_sigaction(args: &SyscallArgs) -> Result<usize, SysError> {
     let idx = sig - 1;
 
     if oldact_addr.as_usize() != 0 {
-        let old = data.sigactions[idx];
+        let old = data.sigactions.as_ref().unwrap().lock()[idx];
         let mut old_bytes = [0u8; 16];
         old_bytes[..8].copy_from_slice(&old.handler.to_ne_bytes());
         old_bytes[8..12].copy_from_slice(&old.flags.to_ne_bytes());
@@ -899,7 +899,7 @@ pub fn sys_sigaction(args: &SyscallArgs) -> Result<usize, SysError> {
         let handler = usize::from_ne_bytes(buf[..8].try_into().unwrap());
         let flags = u32::from_ne_bytes(buf[8..12].try_into().unwrap());
         let mask = u32::from_ne_bytes(buf[12..16].try_into().unwrap());
-        data.sigactions[idx] = signal::SigAction { handler, flags, mask };
+        data.sigactions.as_ref().unwrap().lock()[idx] = signal::SigAction { handler, flags, mask };
     }
 
     Ok(0)
@@ -1157,13 +1157,17 @@ pub fn sys_getpagesize(_args: &SyscallArgs) -> Result<usize, SysError> {
 /// Clone a process (create a thread).
 ///
 /// Arguments (Linux clone convention):
-///   a0 = flags (CLONE_VM=0x100, CLONE_THREAD=0x10000)
+///   a0 = flags (CLONE_VM=0x100, CLONE_THREAD=0x10000, CLONE_SETTLS=0x800)
 ///   a1 = child stack (0 = use parent's sp)
+///   a2 = ptid (not used)
+///   a3 = tls (thread pointer for CLONE_SETTLS)
+///   a4 = ctid (not used)
 pub fn sys_clone(args: &SyscallArgs) -> Result<usize, SysError> {
     let flags = args.get_raw(0);
     let stack = args.get_addr(1);
+    let tls = args.get_raw(3); // CLONE_SETTLS: thread-local storage pointer
 
-    match log!(proc::clone_proc(flags, stack.as_usize())) {
+    match log!(proc::clone_proc(flags, stack.as_usize(), tls)) {
         Ok(pid) => Ok(*pid),
         Err(_) => Err(SysError::ResourceUnavailable),
     }

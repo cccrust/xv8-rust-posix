@@ -381,6 +381,10 @@ pub mod raw {
         syscall2(Syscall::Clone, flags, stack)
     }
 
+    pub fn clone_tls(flags: usize, stack: usize, ptid: usize, tls: usize) -> isize {
+        syscall4(Syscall::Clone, flags, stack, ptid, tls)
+    }
+
     pub fn gettid() -> isize {
         syscall0(Syscall::Gettid)
     }
@@ -952,6 +956,13 @@ pub fn epoll_wait(epfd: Fd, events: &mut [kernel::abi::EpollEvent], timeout: isi
 
 pub fn clone(flags: usize, stack: usize) -> Result<usize, SysError> {
     check(raw::clone(flags, stack))
+}
+
+/// Like `clone()` but also passes a TLS pointer (CLONE_SETTLS).
+/// `ptid` is the parent TID address (unused in xv8).
+/// `tls` is the thread-local storage pointer for `tp` register.
+pub fn clone_with_tls(flags: usize, stack: usize, ptid: usize, tls: usize) -> Result<usize, SysError> {
+    check(raw::clone_tls(flags, stack, ptid, tls))
 }
 
 pub fn gettid() -> usize {

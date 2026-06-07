@@ -8,6 +8,7 @@ const ALL_TESTS: &[&str] = &[
     "/_net", "/_syscall", "/_neteth", "/_netdns", "/_tcpecho", "/_nettools", "/_http",
     "/_async", "/_httpepoll", "/_axum",
     "/_shtest",
+    "/_thread",
 ];
 
 static mut FILTER_BUF: [u8; 256] = [0; 256];

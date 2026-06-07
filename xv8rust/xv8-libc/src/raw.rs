@@ -68,6 +68,9 @@ pub enum Syscall {
     EpollCreate1 = 117,
     EpollCtl = 118,
     EpollWait = 119,
+    Clone = 120,
+    Gettid = 121,
+    ExitGroup = 122,
 }
 
 #[inline(always)]
@@ -453,6 +456,23 @@ pub fn epoll_ctl(epfd: usize, op: usize, fd: usize, event: *const EpollEvent) ->
 
 pub fn epoll_wait(epfd: usize, events: *mut EpollEvent, max_events: usize, timeout: isize) -> isize {
     syscall4(Syscall::EpollWait, epfd, events as usize, max_events, timeout as usize)
+}
+
+pub fn clone(flags: usize, stack: usize) -> isize {
+    syscall2(Syscall::Clone, flags, stack)
+}
+
+pub fn clone_tls(flags: usize, stack: usize, ptid: usize, tls: usize) -> isize {
+    syscall4(Syscall::Clone, flags, stack, ptid, tls)
+}
+
+pub fn gettid() -> isize {
+    syscall1(Syscall::Gettid, 0)
+}
+
+pub fn exit_group(code: usize) -> ! {
+    syscall1(Syscall::ExitGroup, code);
+    unsafe { core::hint::unreachable_unchecked() }
 }
 
 pub const F_GETFL: usize = 3;

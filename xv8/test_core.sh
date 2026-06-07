@@ -5,20 +5,20 @@ cd "$DIR"
 
 echo ""
 echo "=== Core Kernel Tests ==="
-echo "  _fs _pipe _proc _fd _sbrk _cow _syscall"
+echo "  _fs _pipe _proc _fd _sbrk _cow _syscall _thread"
 echo ""
 
 # Build only the user package (fast, no posix/net cross-compile needed)
 cargo build --release --package user
 
 touch /tmp/testmode
-echo "fs,pipe,proc,fd,sbrk,cow,syscall" > /tmp/test_args
+echo "fs,pipe,proc,fd,sbrk,cow,syscall,thread" > /tmp/test_args
 
 # Kernel needs /init as PID 1
 required="target/riscv64gc-unknown-none-elf/release/init"
 
 test_bins="$required target/riscv64gc-unknown-none-elf/release/_testrunner"
-for name in fs pipe proc fd sbrk cow syscall; do
+for name in fs pipe proc fd sbrk cow syscall thread; do
   bin="target/riscv64gc-unknown-none-elf/release/_$name"
   [ -f "$bin" ] && test_bins="$test_bins $bin"
 done

@@ -179,7 +179,7 @@ unsafe fn deliver_pending_signals(data: &mut crate::proc::ProcData) {
         }
         let sig = unblocked.trailing_zeros() as usize + 1;
         let idx = sig - 1;
-        let act = data.sigactions[idx];
+        let act = data.sigactions.as_ref().unwrap().lock()[idx];
 
         // Read trapframe registers before any mutable access
         let (tf_epc, tf_ra, tf_sp, tf_gp, tf_tp, tf_t0, tf_t1, tf_t2, tf_s0, tf_s1,

@@ -1,1 +1,4 @@
-- v3.0: clone() syscall for thread support (in progress)
+- v3.0: clone() syscall + thread support (completed)
+  - Kernel: clone_tls syscall, CLONE_VM/CLONE_SIGHAND/CLONE_SETTLS
+  - xv8-user-std::thread: spawn, join, park, unpark, sleep, yield_now
+  - Test: 8 core tests pass on QEMU

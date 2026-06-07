@@ -407,7 +407,7 @@ pub struct ProcData {
     /// Number of supplementary groups
     pub ngroups: usize,
     /// Signal action table
-    pub sigactions: [signal::SigAction; signal::SIGNAL_MAX],
+    pub sigactions: Option<Arc<SpinLock<[signal::SigAction; signal::SIGNAL_MAX]>>>,
     /// Environment variables (KEY=VALUE entries)
     pub env: Vec<String>,
     /// Next mmap address (grows downward from MMAP_BASE)
@@ -438,7 +438,7 @@ impl ProcData {
             sgid: 0,
             groups: [0u32; 16],
             ngroups: 0,
-            sigactions: [signal::SigAction { handler: 0, flags: 0, mask: 0 }; signal::SIGNAL_MAX],
+            sigactions: None,
             env: Vec::new(),
             mmap_next: VA::new(crate::param::MMAP_BASE),
         }
@@ -710,6 +710,10 @@ impl ProcTable {
                 data.context.zero();
                 data.context.sp = (data.kstack + NKSTACK_PAGES * PGSIZE).as_usize();
                 data.open_files = Some(FdTable::alloc_empty());
+                data.sigactions = Some(Arc::new(SpinLock::new(
+                    [signal::SigAction::default(); signal::SIGNAL_MAX],
+                    "sigactions",
+                )));
 
                 return Ok((proc, inner));
             }
@@ -897,8 +901,11 @@ pub fn fork() -> Result<Pid, KernelError> {
     new_data.groups = data.groups;
     new_data.ngroups = data.ngroups;
 
-    // child inherits signal actions
-    new_data.sigactions = data.sigactions;
+    // child inherits signal actions (deep copy for fork)
+    new_data.sigactions = Some(Arc::new(SpinLock::new(
+        *data.sigactions.as_ref().unwrap().lock(),
+        "sigactions",
+    )));
 
     // child inherits environment variables
     new_data.env = data.env.clone();
@@ -928,9 +935,11 @@ pub fn fork() -> Result<Pid, KernelError> {
 ///
 /// When `CLONE_VM` (0x100) is set, the child shares the parent's page table.
 /// When `CLONE_THREAD` (0x10000) is set, the child belongs to the same thread group.
+/// When `CLONE_SETTLS` (0x800) is set, the child's `tp` register is set to `tls`.
 ///
 /// The child stack is set to `stack` if non-zero.
-pub fn clone_proc(flags: usize, stack: usize) -> Result<Pid, KernelError> {
+/// `tls` is the thread-local storage pointer (for CLONE_SETTLS).
+pub fn clone_proc(flags: usize, stack: usize, tls: usize) -> Result<Pid, KernelError> {
     let (proc, data) = current_proc_and_data_mut();
 
     // allocate and setup new user process
@@ -978,6 +987,12 @@ pub fn clone_proc(flags: usize, stack: usize) -> Result<Pid, KernelError> {
         new_trapframe.sp = stack;
     }
 
+    // set thread pointer (TLS) if CLONE_SETTLS is set
+    if (flags & 0x800) != 0 {
+        // CLONE_SETTLS
+        new_trapframe.tp = tls;
+    }
+
     // inherit name
     new_data.name = data.name.clone();
 
@@ -986,6 +1001,17 @@ pub fn clone_proc(flags: usize, stack: usize) -> Result<Pid, KernelError> {
         new_data.open_files = Some(Arc::clone(data.open_files.as_ref().unwrap()));
     } else {
         new_data.open_files = Some(FdTable::dup_from(data.open_files.as_ref().unwrap()));
+    }
+
+    // share or duplicate signal actions
+    let share_sighand = (flags & 0x80000) != 0; // CLONE_SIGHAND
+    if share_sighand {
+        new_data.sigactions = Some(Arc::clone(data.sigactions.as_ref().unwrap()));
+    } else {
+        new_data.sigactions = Some(Arc::new(SpinLock::new(
+            *data.sigactions.as_ref().unwrap().lock(),
+            "sigactions",
+        )));
     }
 
     // set thread group

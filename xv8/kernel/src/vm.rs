@@ -840,7 +840,6 @@ impl Uvm {
         let (_proc, data) = proc::current_proc_and_data_mut();
 
         if va.as_usize() >= data.size {
-            // case 1: out-of-bounds access
             err!(VmError::InvalidAddress);
         }
 
