@@ -9,6 +9,7 @@ use crate::net::ping::PingTable;
 use crate::net::tcp::TcpTable;
 use crate::net::udp::SocketTable;
 use crate::param::{MAXOPBLOCKS, NDEV, NFILE};
+use crate::eventfd;
 use crate::pipe::Pipe;
 use crate::proc;
 use crate::sleeplock::SleepLock;
@@ -26,6 +27,9 @@ pub enum FileType {
     Ping { socket_id: usize },
     TcpSocket { tcp_id: usize },
     Epoll { epoll_id: usize },
+    EventFd { eventfd_id: usize },
+    MemFd { memfd_id: usize },
+    PidFd { pidfd_id: usize },
 }
 
 /// File metadata protected by table-wide spinlock
@@ -143,7 +147,7 @@ match inner_copy.r#type {
                  let _op = Operation::begin();
                  inode.put();
              }
- FileType::Socket { socket_id } => SocketTable::close(socket_id),
+            FileType::Socket { socket_id } => SocketTable::close(socket_id),
             FileType::TcpSocket { tcp_id } => TcpTable::close(tcp_id),
             FileType::Ping { socket_id } => {
                  crate::net::ping::PingTable::close(socket_id);
@@ -151,6 +155,13 @@ match inner_copy.r#type {
             FileType::Epoll { epoll_id } => {
                 crate::poll::free_epoll_id(epoll_id);
             }
+            FileType::EventFd { eventfd_id } => {
+                eventfd::free_eventfd_id(eventfd_id);
+            }
+            FileType::MemFd { memfd_id } => {
+                crate::memfd::free_memfd_id(memfd_id);
+            }
+            FileType::PidFd { .. } => {}
          }
     }
 
@@ -225,6 +236,44 @@ match inner_copy.r#type {
             FileType::Epoll { .. } => {
                 err!(SysError::BadDescriptor);
             }
+            FileType::EventFd { eventfd_id } => {
+                let val = log!(eventfd::eventfd_read(*eventfd_id));
+                if let Ok(v) = val {
+                    let src = unsafe {
+                        core::slice::from_raw_parts(
+                            &v as *const _ as *const u8,
+                            size_of::<u64>(),
+                        )
+                    };
+                    let copy_n = src.len().min(n);
+                    if log!(proc::copy_to_user(src[..copy_n].as_ref(), addr)).is_err() {
+                        err!(SysError::BadAddress);
+                    }
+                    Ok(copy_n)
+                } else {
+                    Err(val.unwrap_err())
+                }
+            }
+            FileType::MemFd { memfd_id } => {
+                let memfd_id = *memfd_id;
+                let offset = file_inner.offset as usize;
+                let mut buf = alloc::vec![0u8; n];
+                drop(file_inner);
+                let read_n = log!(crate::memfd::memfd_read(memfd_id, offset, &mut buf));
+                if let Ok(n) = read_n {
+                    if n > 0 && log!(proc::copy_to_user(&buf[..n], addr)).is_err() {
+                        err!(SysError::BadAddress);
+                    }
+                    let mut inner = FILE_TABLE.inner[self.id].lock();
+                    inner.offset += n as u32;
+                    Ok(n)
+                } else {
+                    Err(read_n.unwrap_err())
+                }
+            }
+            FileType::PidFd { .. } => {
+                err!(SysError::BadDescriptor);
+            }
         }
     }
 
@@ -296,6 +345,35 @@ match inner_copy.r#type {
             FileType::Epoll { .. } => {
                 err!(SysError::InvalidArgument);
             }
+            FileType::EventFd { eventfd_id } => {
+                let mut val_buf = [0u8; 8];
+                if log!(proc::copy_from_user(addr, &mut val_buf)).is_err() {
+                    err!(SysError::BadAddress);
+                }
+                let val = u64::from_ne_bytes(val_buf);
+                log!(eventfd::eventfd_write(*eventfd_id, val));
+                Ok(8)
+            }
+            FileType::MemFd { memfd_id } => {
+                let memfd_id = *memfd_id;
+                let mut buf = alloc::vec![0u8; n];
+                if log!(proc::copy_from_user(addr, &mut buf)).is_err() {
+                    err!(SysError::BadAddress);
+                }
+                let offset = file_inner.offset as usize;
+                drop(file_inner);
+                let write_n = log!(crate::memfd::memfd_write(memfd_id, offset, &buf));
+                if let Ok(n) = write_n {
+                    let mut inner = FILE_TABLE.inner[self.id].lock();
+                    inner.offset += n as u32;
+                    Ok(n)
+                } else {
+                    Err(write_n.unwrap_err())
+                }
+            }
+            FileType::PidFd { .. } => {
+                err!(SysError::BadDescriptor);
+            }
         }
     }
 
@@ -331,8 +409,8 @@ match inner_copy.r#type {
 
          match &file_inner.r#type {
              FileType::None => err!(SysError::BadDescriptor),
-             FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } | FileType::Epoll { .. } => err!(SysError::IsDirectory),
-             FileType::Inode { .. } | FileType::Device { .. } => {
+              FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } | FileType::Epoll { .. } | FileType::EventFd { .. } | FileType::PidFd { .. } => err!(SysError::IsDirectory),
+             FileType::Inode { .. } | FileType::Device { .. } | FileType::MemFd { .. } => {
                 let new_offset = match whence {
                     0 => { // SEEK_SET
                         if offset < 0 {
@@ -358,6 +436,14 @@ match inner_copy.r#type {
                                     err!(SysError::InvalidArgument);
                                 }
                                 drop(inode_inner);
+                                new as u32
+                            }
+                            FileType::MemFd { memfd_id } => {
+                                let size = crate::memfd::memfd_size(*memfd_id).unwrap_or(0) as isize;
+                                let new = size + offset;
+                                if new < 0 {
+                                    err!(SysError::InvalidArgument);
+                                }
                                 new as u32
                             }
                             _ => err!(SysError::InvalidArgument),

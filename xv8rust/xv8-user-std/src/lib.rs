@@ -181,6 +181,12 @@ pub mod os {
         pub mod net;
         pub mod process;
     }
+    pub mod linux {
+        pub mod eventfd;
+        pub mod timerfd;
+        pub mod memfd;
+        pub mod pidfd;
+    }
     pub mod fd {
         pub use super::unix::io::{
             AsFd, AsRawFd, BorrowedFd, FromRawFd, IntoRawFd, OwnedFd, RawFd,

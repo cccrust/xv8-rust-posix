@@ -457,6 +457,27 @@ pub mod raw {
     pub fn pwrite(fd: usize, buf: usize, n: usize, offset: usize) -> isize {
         syscall4(Syscall::Pwrite, fd, buf, n, offset)
     }
+
+    pub fn eventfd2(initval: u32, flags: u32) -> isize {
+        let ret: isize;
+        unsafe {
+            asm!(
+                "ecall",
+                in("a7") Syscall::EventFd2 as usize,
+                inlateout("a0") initval as isize => ret,
+                in("a1") flags as usize,
+            );
+        }
+        ret
+    }
+
+    pub fn memfd_create(flags: usize) -> isize {
+        syscall2(Syscall::MemFdCreate, 0, flags)
+    }
+
+    pub fn pidfd_open(pid: usize, flags: usize) -> isize {
+        syscall2(Syscall::PidFdOpen, pid, flags)
+    }
 }
 
 use kernel::abi::{MAXPATH, Stat, SysError};

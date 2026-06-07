@@ -92,3 +92,33 @@ Target: `riscv64gc-unknown-none-elf` + `xv8-user-std` crate as std overlay.
 | `sync::{Mutex,Condvar,RwLock}` | `sync.rs` | ✅ Condvar v3.2 |
 | `time::{Duration,Instant,SystemTime}` | `time.rs` | ✅ |
 | `sys/pal/{futex,thread_parking}` | `thread.rs` + kernel | ✅ v3.2 |
+
+---
+
+## v4.x — Linux 獨有功能
+
+> 詳細計畫請見 [`v4_todo.md`](v4_todo.md)
+
+| 版本 | 主題 | 新增 syscalls |
+|------|------|---------------|
+| v4.1 | Notification FD | eventfd, signalfd, timerfd |
+| v4.2 | 新 FD 類型 | memfd_create, pidfd_open |
+| v4.3 | 零拷貝 I/O | splice, tee, vmsplice |
+| v4.4 | 通用工具 | getrandom, close_range, prctl |
+| v4.5 | 檔案監控 | inotify_init1, add_watch, rm_watch |
+| v4.6 | os::linux 模組完整化 | — |
+| v4.7 | 整合測試 + QEMU 驗證 | — |
+
+## v5.x — Docker / 容器基礎設施
+
+> 詳細計畫請見 `v4_todo.md#v5x--docker--容器基礎設施`
+
+| 版本 | 主題 | 核心新增 |
+|------|------|---------|
+| v5.1 | Namespaces | clone(CLONE_NEW*), unshare, setns |
+| v5.2 | cgroups v2 | cgroupfs + CPU/Mem/PID controllers |
+| v5.3 | 安全隔離 | Capabilities + seccomp-BPF |
+| v5.4 | OverlayFS | 堆疊式聯合掛載檔案系統 |
+| v5.5 | 容器網路 | veth pair, bridge, NAT |
+| v5.6 | 容器執行環境 | pivot_root, sethostname, container lifecycle |
+| v5.7 | xv8-container 工具 | Docker-like CLI |

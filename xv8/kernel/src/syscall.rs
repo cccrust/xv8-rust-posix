@@ -384,6 +384,12 @@ pub enum Syscall {
     Gettid = 121,
     ExitGroup = 122,
     Futex = 123,
+    EventFd2 = 124,
+    TimerFdCreate = 126,
+    TimerFdSettime = 127,
+    TimerFdGettime = 128,
+    MemFdCreate = 129,
+    PidFdOpen = 130,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -513,6 +519,12 @@ impl TryFrom<usize> for Syscall {
             121 => Ok(Syscall::Gettid),
             122 => Ok(Syscall::ExitGroup),
             123 => Ok(Syscall::Futex),
+            124 => Ok(Syscall::EventFd2),
+            126 => Ok(Syscall::TimerFdCreate),
+            127 => Ok(Syscall::TimerFdSettime),
+            128 => Ok(Syscall::TimerFdGettime),
+            129 => Ok(Syscall::MemFdCreate),
+            130 => Ok(Syscall::PidFdOpen),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -650,6 +662,12 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Gettid => sys_gettid(&args),
             Syscall::ExitGroup => sys_exit_group(&args),
             Syscall::Futex => sys_futex(&args),
+            Syscall::EventFd2 => sys_eventfd2(&args),
+            Syscall::TimerFdCreate => sys_timerfd_create(&args),
+            Syscall::TimerFdSettime => sys_timerfd_settime(&args),
+            Syscall::TimerFdGettime => sys_timerfd_gettime(&args),
+            Syscall::MemFdCreate => sys_memfd_create(&args),
+            Syscall::PidFdOpen => sys_pidfd_open(&args),
         },
         Err(e) => Err(e),
     };

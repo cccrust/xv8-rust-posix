@@ -1187,6 +1187,71 @@ pub fn sys_exit_group(args: &SyscallArgs) -> ! {
 
 /// Minimal futex: FUTEX_WAIT (0) and FUTEX_WAKE (1).
 ///
+pub fn sys_eventfd2(args: &SyscallArgs) -> Result<usize, SysError> {
+    let initval = args.get_int(0) as u32;
+    let flags = args.get_int(1) as u32;
+
+    let eventfd_id = try_log!(crate::eventfd::alloc_eventfd_id(initval, flags));
+
+    let file = try_log!(crate::file::File::alloc());
+    let fd = try_log!(crate::sysfile::fd_alloc(file.clone()));
+
+    let mut inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    inner.r#type = crate::file::FileType::EventFd { eventfd_id };
+    inner.readable = true;
+    inner.writeable = true;
+    inner.offset = 0;
+
+    Ok(fd)
+}
+
+pub fn sys_timerfd_create(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _clockid = args.get_int(0) as i32;
+    let _flags = args.get_int(1) as u32;
+    err!(SysError::NotImplemented)
+}
+
+pub fn sys_timerfd_settime(args: &SyscallArgs) -> Result<usize, SysError> {
+    err!(SysError::NotImplemented)
+}
+
+pub fn sys_timerfd_gettime(args: &SyscallArgs) -> Result<usize, SysError> {
+    err!(SysError::NotImplemented)
+}
+
+pub fn sys_memfd_create(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _name_addr = args.get_addr(0);
+    let flags = args.get_int(1) as u32;
+    let memfd_id = try_log!(crate::memfd::alloc_memfd_id());
+    let file = try_log!(crate::file::File::alloc());
+    let fd = try_log!(crate::sysfile::fd_alloc(file.clone()));
+    let mut inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    inner.r#type = crate::file::FileType::MemFd { memfd_id };
+    inner.readable = true;
+    inner.writeable = true;
+    inner.offset = 0;
+    if (flags & crate::memfd::MFD_CLOEXEC) != 0 {
+        inner.nonblocking = false;
+    }
+    Ok(fd)
+}
+
+pub fn sys_pidfd_open(args: &SyscallArgs) -> Result<usize, SysError> {
+    let pid = args.get_int(0) as usize;
+    let _flags = args.get_int(1) as u32;
+    if !crate::proc::is_valid_pid(pid) {
+        err!(SysError::NoEntry);
+    }
+    let pidfd_id = try_log!(crate::pidfd::alloc_pidfd_id(pid));
+    let file = try_log!(crate::file::File::alloc());
+    let fd = try_log!(crate::sysfile::fd_alloc(file.clone()));
+    let mut inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    inner.r#type = crate::file::FileType::PidFd { pidfd_id };
+    inner.readable = true;
+    inner.writeable = false;
+    Ok(fd)
+}
+
 /// a0 = uaddr (user address)
 /// a1 = futex_op (WAIT=0, WAKE=1)
 /// a2 = val    (expected value for WAIT, wake count for WAKE)

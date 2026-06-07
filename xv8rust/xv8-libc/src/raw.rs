@@ -72,6 +72,12 @@ pub enum Syscall {
     Gettid = 121,
     ExitGroup = 122,
     Futex = 123,
+    EventFd2 = 124,
+    TimerFdCreate = 126,
+    TimerFdSettime = 127,
+    TimerFdGettime = 128,
+    MemFdCreate = 129,
+    PidFdOpen = 130,
 }
 
 #[inline(always)]
@@ -487,4 +493,41 @@ pub const FUTEX_WAKE: u32 = 1;
 
 pub fn futex(uaddr: *const u32, op: u32, val: u32) -> isize {
     syscall3(Syscall::Futex, uaddr as usize, op as usize, val as usize)
+}
+
+pub const EFD_SEMAPHORE: u32 = 0x0001;
+pub const EFD_NONBLOCK: u32 = 0x0800;
+pub const EFD_CLOEXEC: u32 = 0x20000;
+
+pub const TFD_NONBLOCK: u32 = 0x0800;
+pub const TFD_CLOEXEC: u32 = 0x20000;
+pub const TFD_TIMER_ABSTIME: u32 = 0x0001;
+
+pub const CLOCK_REALTIME: u32 = 0;
+pub const CLOCK_MONOTONIC: u32 = 1;
+
+pub const MFD_CLOEXEC: u32 = 0x0001;
+
+pub fn eventfd2(initval: u32, flags: u32) -> isize {
+    syscall2(Syscall::EventFd2, initval as usize, flags as usize)
+}
+
+pub fn timerfd_create(clockid: i32, flags: u32) -> isize {
+    syscall2(Syscall::TimerFdCreate, clockid as usize, flags as usize)
+}
+
+pub fn timerfd_settime(fd: usize, flags: u32, new_val: usize, old_val: usize) -> isize {
+    syscall4(Syscall::TimerFdSettime, fd, flags as usize, new_val, old_val)
+}
+
+pub fn timerfd_gettime(fd: usize, curr_val: usize) -> isize {
+    syscall2(Syscall::TimerFdGettime, fd, curr_val)
+}
+
+pub fn memfd_create(name: usize, flags: u32) -> isize {
+    syscall2(Syscall::MemFdCreate, name, flags as usize)
+}
+
+pub fn pidfd_open(pid: usize, flags: u32) -> isize {
+    syscall2(Syscall::PidFdOpen, pid, flags as usize)
 }

@@ -118,6 +118,14 @@ fn fd_readiness(fd: usize) -> (bool, bool) {
             (inner.readable, inner.writeable)
         }
         FileType::Epoll { .. } => (false, false),
+        FileType::EventFd { eventfd_id } => {
+            crate::eventfd::eventfd_readiness(*eventfd_id)
+        }
+        FileType::MemFd { .. } => (true, true),
+        FileType::PidFd { pidfd_id } => {
+            let alive = crate::pidfd::pidfd_is_alive(*pidfd_id);
+            (!alive, false)
+        }
         FileType::None => (false, false),
     }
 }

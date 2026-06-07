@@ -17,6 +17,12 @@ pub use raw::{fcntl, poll, epoll_create1, epoll_ctl, epoll_wait, PollFd, EpollEv
     EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
     F_GETFL, F_SETFL, O_NONBLOCK, EAGAIN};
 pub use raw::{clone, clone_tls, gettid, exit_group, futex, FUTEX_WAIT, FUTEX_WAKE};
+pub use raw::{eventfd2, EFD_SEMAPHORE, EFD_NONBLOCK, EFD_CLOEXEC};
+pub use raw::{timerfd_create, timerfd_settime, timerfd_gettime,
+    TFD_NONBLOCK, TFD_CLOEXEC, TFD_TIMER_ABSTIME,
+    CLOCK_REALTIME, CLOCK_MONOTONIC};
+pub use raw::{memfd_create, pidfd_open};
+pub use raw::MFD_CLOEXEC;
 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

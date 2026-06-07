@@ -222,6 +222,27 @@ test = false
 doctest = false
 bench = false
 
+[[bin]]
+name = "_eventfd"
+path = "testbin/eventfd.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_memfd_create"
+path = "testbin/memfd.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_pidfd"
+path = "testbin/pidfd.rs"
+test = false
+doctest = false
+bench = false
+
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
 xv8-tokio-compat = { path = "../../xv8rust/xv8-tokio-compat" }

@@ -55,6 +55,15 @@ pub const USERSTACK: usize = 4;
 /// max epoll instances per system
 pub const NEPOLL: usize = 16;
 
+/// max eventfd instances per system
+pub const NEVENTFD: usize = 16;
+
+/// max memfd instances per system
+pub const NMEMFD: usize = 16;
+
+/// max pidfd instances per system
+pub const NPIDFD: usize = 16;
+
 /// max mmap regions per process
 pub const MMAP_REGIONS: usize = 16;
 

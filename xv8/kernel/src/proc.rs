@@ -309,6 +309,8 @@ pub enum Channel {
     Epoll(usize),
     /// Userspace address for futex.
     Address(usize),
+    /// eventfd notification
+    EventFd(usize),
 }
 
 /// Process control block
@@ -1454,6 +1456,26 @@ pub fn copy_from_user(src: VA, dst: &mut [u8]) -> Result<(), KernelError> {
             .copy_from(src, dst)
     )
     .map_err(|e| e.into())
+}
+
+pub fn is_valid_pid(pid: usize) -> bool {
+    for p in PROC_TABLE.iter() {
+        if *p.inner.lock().pid == pid {
+            return true;
+        }
+    }
+    false
+}
+
+pub fn all_pids() -> Vec<usize> {
+    let mut pids = Vec::new();
+    for p in PROC_TABLE.iter() {
+        let pid = *p.inner.lock().pid;
+        if pid != 0 {
+            pids.push(pid as usize);
+        }
+    }
+    pids
 }
 
 /// Initializes the process table.

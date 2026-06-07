@@ -10,6 +10,9 @@ const ALL_TESTS: &[&str] = &[
     "/_shtest",
     "/_thread",
     "/_thread_v3",
+    "/_eventfd",
+    "/_memfd_create",
+    "/_pidfd",
 ];
 
 static mut FILTER_BUF: [u8; 256] = [0; 256];
