@@ -307,6 +307,8 @@ pub enum Channel {
     Network,
     /// epoll instance
     Epoll(usize),
+    /// Userspace address for futex.
+    Address(usize),
 }
 
 /// Process control block
@@ -1371,6 +1373,25 @@ pub fn sleep<T>(channel: Channel, condition_lock: SpinLockGuard<'_, T>) -> SpinL
 
     // reacquire original lock.
     condition_mutex.lock()
+}
+
+/// Wakes up at most `count` processes sleeping on channel.
+/// Must be called without any proc lock.
+pub fn wakeup_n(channel: Channel, count: usize) -> usize {
+    let current_proc = current_proc_opt();
+    let mut woken = 0;
+    for proc in PROC_TABLE.iter() {
+        if woken >= count { break; }
+        if current_proc.is_some_and(|p| ptr::eq(p, proc)) {
+            continue;
+        }
+        let mut inner = proc.inner.lock();
+        if inner.state == ProcState::Sleeping && inner.channel == Some(channel) {
+            inner.state = ProcState::Runnable;
+            woken += 1;
+        }
+    }
+    woken
 }
 
 /// Wakes up all processes sleeping on channel.

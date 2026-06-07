@@ -16,7 +16,8 @@ pub use raw::{fcntl, poll, epoll_create1, epoll_ctl, epoll_wait, PollFd, EpollEv
     EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLRDHUP,
     EPOLL_CTL_ADD, EPOLL_CTL_DEL, EPOLL_CTL_MOD,
     F_GETFL, F_SETFL, O_NONBLOCK, EAGAIN};
-pub use raw::{clone, clone_tls, gettid, exit_group};
+pub use raw::{clone, clone_tls, gettid, exit_group, futex, FUTEX_WAIT, FUTEX_WAKE};
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Fd(usize);

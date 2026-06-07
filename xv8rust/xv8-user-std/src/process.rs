@@ -139,6 +139,7 @@ impl Command {
             let _ = xv8_libc::close(read_fd);
             return Ok(Child {
                 pid: pid as usize,
+                exit_status: None,
                 stdin: Some(ChildStdin(File::from_raw_fd(write_fd))),
                 stdout: stdout_pipe.map(|(read_fd, write_fd)| {
                     let _ = xv8_libc::close(write_fd);
@@ -158,6 +159,7 @@ impl Command {
 
         Ok(Child {
             pid: pid as usize,
+            exit_status: None,
             stdin: None,
             stdout: stdout_pipe.map(|(read_fd, write_fd)| {
                 let _ = xv8_libc::close(write_fd);
@@ -229,6 +231,7 @@ fn close_pipe(pipe: Option<(usize, usize)>) {
 
 pub struct Child {
     pid: usize,
+    exit_status: Option<ExitStatus>,
     pub stdin: Option<ChildStdin>,
     pub stdout: Option<ChildStdout>,
     pub stderr: Option<ChildStderr>,
@@ -238,28 +241,108 @@ impl Child {
     pub fn id(&self) -> usize { self.pid }
 
     pub fn wait(&mut self) -> io::Result<ExitStatus> {
-        let mut status = 0usize;
-        let waited = xv8_libc::wait(&mut status as *mut usize);
-        if waited < 0 {
-            return Err(io::ErrorKind::Other.into());
+        if let Some(status) = self.exit_status {
+            return Ok(status);
         }
-        Ok(ExitStatus { code: status as i32 })
+        let _ = self.stdin.take();
+
+        loop {
+            let mut status = 0usize;
+            let waited = xv8_libc::wait(&mut status as *mut usize);
+            if waited < 0 {
+                return Err(io::ErrorKind::Other.into());
+            }
+            if waited as usize == self.pid {
+                let es = ExitStatus { code: status as i32 };
+                self.exit_status = Some(es);
+                return Ok(es);
+            }
+        }
+    }
+
+    pub fn try_wait(&mut self) -> io::Result<Option<ExitStatus>> {
+        if let Some(status) = self.exit_status {
+            return Ok(Some(status));
+        }
+        Ok(None)
     }
 
     pub fn wait_with_output(mut self) -> io::Result<Output> {
-        let status = self.wait()?;
+        let _ = self.stdin.take();
+
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
 
-        if let Some(mut child_stdout) = self.stdout.take() {
-            let _ = child_stdout.read_to_end(&mut stdout);
-        }
-        if let Some(mut child_stderr) = self.stderr.take() {
-            let _ = child_stderr.read_to_end(&mut stderr);
+        match (self.stdout.take(), self.stderr.take()) {
+            (None, None) => {}
+            (Some(mut out), None) => {
+                let _ = out.read_to_end(&mut stdout);
+            }
+            (None, Some(mut err)) => {
+                let _ = err.read_to_end(&mut stderr);
+            }
+            (Some(out), Some(err)) => {
+                let _ = read_output(out, err, &mut stdout, &mut stderr);
+            }
         }
 
+        let status = self.wait()?;
         Ok(Output { status, stdout, stderr })
     }
+}
+
+fn read_output(out: ChildStdout, err: ChildStderr, stdout: &mut Vec<u8>, stderr: &mut Vec<u8>) -> io::Result<()> {
+    use xv8_libc::{PollFd, POLLIN, POLLHUP};
+
+    let out_fd = out.0.as_raw_fd();
+    let err_fd = err.0.as_raw_fd();
+
+    let mut fds = [
+        PollFd { fd: out_fd as i32, events: POLLIN, revents: 0 },
+        PollFd { fd: err_fd as i32, events: POLLIN, revents: 0 },
+    ];
+
+    let mut buf = [0u8; 4096];
+    let mut out_done = false;
+    let mut err_done = false;
+
+    while !out_done || !err_done {
+        if out_done { fds[0].events = 0; } else { fds[0].events = POLLIN; }
+        if err_done { fds[1].events = 0; } else { fds[1].events = POLLIN; }
+        fds[0].revents = 0;
+        fds[1].revents = 0;
+
+        let ret = xv8_libc::poll(fds.as_mut_ptr(), 2, -1);
+        if ret < 0 {
+            return Err(io::ErrorKind::Other.into());
+        }
+
+        if (fds[0].revents & POLLIN) != 0 && !out_done {
+            let n = xv8_libc::read(out_fd, buf.as_mut_ptr(), buf.len());
+            if n > 0 {
+                stdout.extend_from_slice(&buf[..n as usize]);
+            } else {
+                out_done = true;
+            }
+        }
+        if (fds[0].revents & POLLHUP) != 0 {
+            out_done = true;
+        }
+
+        if (fds[1].revents & POLLIN) != 0 && !err_done {
+            let n = xv8_libc::read(err_fd, buf.as_mut_ptr(), buf.len());
+            if n > 0 {
+                stderr.extend_from_slice(&buf[..n as usize]);
+            } else {
+                err_done = true;
+            }
+        }
+        if (fds[1].revents & POLLHUP) != 0 {
+            err_done = true;
+        }
+    }
+
+    Ok(())
 }
 
 pub struct ChildStdin(File);

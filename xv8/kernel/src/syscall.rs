@@ -383,6 +383,7 @@ pub enum Syscall {
     Clone = 120,
     Gettid = 121,
     ExitGroup = 122,
+    Futex = 123,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -511,6 +512,7 @@ impl TryFrom<usize> for Syscall {
             120 => Ok(Syscall::Clone),
             121 => Ok(Syscall::Gettid),
             122 => Ok(Syscall::ExitGroup),
+            123 => Ok(Syscall::Futex),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -647,6 +649,7 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::Clone => sys_clone(&args),
             Syscall::Gettid => sys_gettid(&args),
             Syscall::ExitGroup => sys_exit_group(&args),
+            Syscall::Futex => sys_futex(&args),
         },
         Err(e) => Err(e),
     };

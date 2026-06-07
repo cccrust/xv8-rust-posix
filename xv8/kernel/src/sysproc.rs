@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::memlayout::QEMU_POWER;
 use crate::param::MMAP_BASE;
-use crate::proc::{self, Channel, Pid, current_proc, current_proc_and_data_mut};
+use crate::proc::{self, Channel, Pid, ProcState, current_proc, current_proc_and_data_mut, wakeup_n};
 use crate::rng::rand_bytes;
 use crate::riscv::{pg_round_up, PGSIZE};
 use crate::signal;
@@ -1183,4 +1183,45 @@ pub fn sys_gettid(args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_exit_group(args: &SyscallArgs) -> ! {
     let status = args.get_int(0);
     proc::exit_group(status);
+}
+
+/// Minimal futex: FUTEX_WAIT (0) and FUTEX_WAKE (1).
+///
+/// a0 = uaddr (user address)
+/// a1 = futex_op (WAIT=0, WAKE=1)
+/// a2 = val    (expected value for WAIT, wake count for WAKE)
+pub fn sys_futex(args: &SyscallArgs) -> Result<usize, SysError> {
+    let addr = args.get_addr(0);
+    let op = args.get_int(1) as i32;
+    let val = args.get_int(2) as u32;
+
+    match op & 0xf {
+        0 => {
+            // FUTEX_WAIT: sleep if *addr == val, else EAGAIN
+            let (proc, mut data) = current_proc_and_data_mut();
+            let mut buf = [0u8; 4];
+            if data.pagetable_mut().copy_from(addr, &mut buf).is_err() {
+                return Err(SysError::BadAddress);
+            }
+            let curr = u32::from_le_bytes(buf);
+            if curr != val {
+                return Err(SysError::ResourceUnavailable); // EAGAIN
+            }
+            let _ = data;
+            let mut inner = proc.inner.lock();
+            inner.channel = Some(Channel::Address(addr.as_usize()));
+            inner.state = ProcState::Sleeping;
+            let context = unsafe { &mut proc.data_mut().context };
+            inner = proc::sched(inner, context);
+            inner.channel = None;
+            Ok(0)
+        }
+        1 => {
+            // FUTEX_WAKE: wake up to `val` waiters
+            let channel = Channel::Address(addr.as_usize());
+            let woken = wakeup_n(channel, val as usize);
+            Ok(woken)
+        }
+        _ => Err(SysError::NotImplemented),
+    }
 }

@@ -71,6 +71,7 @@ pub enum Syscall {
     Clone = 120,
     Gettid = 121,
     ExitGroup = 122,
+    Futex = 123,
 }
 
 #[inline(always)]
@@ -480,3 +481,10 @@ pub const F_SETFL: usize = 4;
 pub const O_NONBLOCK: usize = 0x800;
 
 pub const EAGAIN: u16 = 11;
+
+pub const FUTEX_WAIT: u32 = 0;
+pub const FUTEX_WAKE: u32 = 1;
+
+pub fn futex(uaddr: *const u32, op: u32, val: u32) -> isize {
+    syscall3(Syscall::Futex, uaddr as usize, op as usize, val as usize)
+}

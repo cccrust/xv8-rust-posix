@@ -3,6 +3,9 @@ use core::cell::OnceCell;
 use core::ops::{Deref, DerefMut};
 use core::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
 
+const FUTEX_WAIT: u32 = 0;
+const FUTEX_WAKE: u32 = 1;
+
 pub use core::sync::*;
 pub use alloc::sync::Arc;
 pub use core::cell::OnceCell as OnceLock;
@@ -246,44 +249,37 @@ impl<T> Drop for RwLockWriteGuard<'_, T> {
 }
 
 pub struct Condvar {
-    fds: OnceCell<(usize, usize)>,
+    counter: AtomicU32,
 }
 
 impl Condvar {
     pub const fn new() -> Self {
-        Self { fds: OnceCell::new() }
-    }
-
-    fn pipe_fds(&self) -> &(usize, usize) {
-        self.fds.get_or_init(|| {
-            let mut fds = [0usize; 2];
-            let ret = xv8_libc::pipe(fds.as_mut_ptr());
-            assert!(ret >= 0, "Condvar pipe creation failed");
-            (fds[0], fds[1])
-        })
+        Self { counter: AtomicU32::new(0) }
     }
 
     pub fn wait<'a, U>(&self, guard: MutexGuard<'a, U>) -> LockResult<MutexGuard<'a, U>> {
+        let count = self.counter.load(Ordering::Relaxed);
         let mutex = guard.mutex;
         drop(guard);
 
-        let (rfd, _) = *self.pipe_fds();
-        let mut buf = [0u8; 1];
-        let _ = xv8_libc::read(rfd, buf.as_mut_ptr(), 1);
+        let ptr = &self.counter as *const AtomicU32 as *const u32;
+        if xv8_libc::futex(ptr, FUTEX_WAIT, count) < 0 {
+            // EAGAIN or spurious wakeup — proceed
+        }
 
         mutex.lock()
     }
 
     pub fn notify_one(&self) {
-        let (_, wfd) = *self.pipe_fds();
-        let buf = [1u8];
-        let _ = xv8_libc::write(wfd, buf.as_ptr(), 1);
+        self.counter.fetch_add(1, Ordering::Release);
+        let ptr = &self.counter as *const AtomicU32 as *const u32;
+        xv8_libc::futex(ptr, FUTEX_WAKE, 1);
     }
 
     pub fn notify_all(&self) {
-        let (_, wfd) = *self.pipe_fds();
-        let buf = [1u8; 64];
-        let _ = xv8_libc::write(wfd, buf.as_ptr(), 64);
+        self.counter.fetch_add(1, Ordering::Release);
+        let ptr = &self.counter as *const AtomicU32 as *const u32;
+        xv8_libc::futex(ptr, FUTEX_WAKE, i32::MAX as u32);
     }
 }
 
