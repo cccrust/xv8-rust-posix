@@ -1,14 +1,17 @@
 use core::cell::UnsafeCell;
-use core::cell::OnceCell;
 use core::ops::{Deref, DerefMut};
-use core::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicIsize, AtomicU32, Ordering};
 
 const FUTEX_WAIT: u32 = 0;
 const FUTEX_WAKE: u32 = 1;
 
+const UNLOCKED: u32 = 0;
+const LOCKED: u32 = 1;
+const CONTENDED: u32 = 2;
+
 pub use core::sync::*;
 pub use alloc::sync::Arc;
-pub use core::cell::OnceCell as OnceLock;
+pub use core::cell::OnceCell;
 
 pub type LockResult<T> = Result<T, PoisonError<T>>;
 pub type TryLockResult<T> = Result<T, TryLockError<T>>;
@@ -29,9 +32,7 @@ pub enum TryLockError<T> {
 }
 
 pub struct Mutex<T> {
-    locked: AtomicBool,
-    waiters: AtomicU32,
-    fds: OnceCell<(usize, usize)>,
+    state: AtomicU32,
     value: UnsafeCell<T>,
 }
 
@@ -41,52 +42,38 @@ unsafe impl<T: Send> Sync for Mutex<T> {}
 impl<T> Mutex<T> {
     pub const fn new(value: T) -> Self {
         Self {
-            locked: AtomicBool::new(false),
-            waiters: AtomicU32::new(0),
-            fds: OnceCell::new(),
+            state: AtomicU32::new(UNLOCKED),
             value: UnsafeCell::new(value),
         }
     }
 
-    fn pipe_fds(&self) -> &(usize, usize) {
-        self.fds.get_or_init(|| {
-            let mut fds = [0usize; 2];
-            let ret = xv8_libc::pipe(fds.as_mut_ptr());
-            assert!(ret >= 0, "Mutex pipe creation failed");
-            (fds[0], fds[1])
-        })
+    pub fn lock(&self) -> LockResult<MutexGuard<'_, T>> {
+        self.lock_inner();
+        Ok(MutexGuard { mutex: self })
     }
 
-    pub fn lock(&self) -> LockResult<MutexGuard<'_, T>> {
+    fn lock_inner(&self) {
+        if self.state.compare_exchange(UNLOCKED, LOCKED, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+            return;
+        }
         loop {
             for _ in 0..100 {
-                if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-                    return Ok(MutexGuard { mutex: self });
+                if self.state.compare_exchange(UNLOCKED, LOCKED, Ordering::Acquire, Ordering::Relaxed).is_ok() {
+                    return;
                 }
                 core::hint::spin_loop();
             }
-
-            self.waiters.fetch_add(1, Ordering::Acquire);
-
-            if self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_ok() {
-                self.waiters.fetch_sub(1, Ordering::Release);
-                return Ok(MutexGuard { mutex: self });
+            if self.state.swap(CONTENDED, Ordering::Acquire) != CONTENDED
+                && self.state.load(Ordering::Relaxed) == CONTENDED
+            {
+                let ptr = &self.state as *const AtomicU32 as *const u32;
+                xv8_libc::futex(ptr, FUTEX_WAIT, CONTENDED);
             }
-
-            let (rfd, _) = *self.pipe_fds();
-            let mut buf = [0u8; 1];
-            let ret = xv8_libc::read(rfd, buf.as_mut_ptr(), 1);
-            if ret < 0 {
-                self.waiters.fetch_sub(1, Ordering::Release);
-                continue;
-            }
-
-            self.waiters.fetch_sub(1, Ordering::Release);
         }
     }
 
     pub fn try_lock(&self) -> TryLockResult<MutexGuard<'_, T>> {
-        match self.locked.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed) {
+        match self.state.compare_exchange(UNLOCKED, LOCKED, Ordering::Acquire, Ordering::Relaxed) {
             Ok(_) => Ok(MutexGuard { mutex: self }),
             Err(_) => Err(TryLockError::WouldBlock),
         }
@@ -114,6 +101,12 @@ pub struct MutexGuard<'a, T> {
 unsafe impl<T: Sync> Send for MutexGuard<'_, T> {}
 unsafe impl<T: Sync> Sync for MutexGuard<'_, T> {}
 
+impl<T> core::fmt::Debug for MutexGuard<'_, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("MutexGuard").finish_non_exhaustive()
+    }
+}
+
 impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
@@ -129,11 +122,9 @@ impl<T> DerefMut for MutexGuard<'_, T> {
 
 impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
-        self.mutex.locked.store(false, Ordering::Release);
-        if self.mutex.waiters.load(Ordering::Relaxed) > 0 {
-            let (_, wfd) = *self.mutex.pipe_fds();
-            let buf = [1u8];
-            let _ = xv8_libc::write(wfd, buf.as_ptr(), 1);
+        if self.mutex.state.swap(UNLOCKED, Ordering::Release) == CONTENDED {
+            let ptr = &self.mutex.state as *const AtomicU32 as *const u32;
+            xv8_libc::futex(ptr, FUTEX_WAKE, 1);
         }
     }
 }
@@ -212,6 +203,12 @@ pub struct RwLockReadGuard<'a, T> {
     lock: &'a RwLock<T>,
 }
 
+impl<T> core::fmt::Debug for RwLockReadGuard<'_, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RwLockReadGuard").finish_non_exhaustive()
+    }
+}
+
 impl<T> Deref for RwLockReadGuard<'_, T> {
     type Target = T;
     fn deref(&self) -> &T {
@@ -227,6 +224,12 @@ impl<T> Drop for RwLockReadGuard<'_, T> {
 
 pub struct RwLockWriteGuard<'a, T> {
     lock: &'a RwLock<T>,
+}
+
+impl<T> core::fmt::Debug for RwLockWriteGuard<'_, T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("RwLockWriteGuard").finish_non_exhaustive()
+    }
 }
 
 impl<T> Deref for RwLockWriteGuard<'_, T> {
@@ -315,5 +318,38 @@ impl<T, F: FnOnce() -> T> Deref for LazyLock<T, F> {
     type Target = T;
     fn deref(&self) -> &T {
         Self::force(self)
+    }
+}
+
+pub struct Barrier {
+    count: AtomicU32,
+    total: u32,
+    condvar: Condvar,
+    mutex: Mutex<()>,
+}
+
+impl Barrier {
+    pub const fn new(n: usize) -> Self {
+        Barrier {
+            count: AtomicU32::new(0),
+            total: n as u32,
+            condvar: Condvar::new(),
+            mutex: Mutex::new(()),
+        }
+    }
+
+    pub fn wait(&self) -> bool {
+        let guard = self.mutex.lock().unwrap();
+        let count = self.count.fetch_add(1, Ordering::AcqRel) + 1;
+        if count < self.total {
+            let mut g = guard;
+            while self.count.load(Ordering::Acquire) < self.total {
+                g = self.condvar.wait(g).unwrap();
+            }
+            false
+        } else {
+            self.condvar.notify_all();
+            true
+        }
     }
 }

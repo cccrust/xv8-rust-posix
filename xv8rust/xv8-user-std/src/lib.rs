@@ -144,6 +144,7 @@ pub mod convert {
 }
 
 pub mod sync;
+pub mod panic;
 
 pub mod prelude {
     pub mod rust_2021 {
@@ -177,6 +178,8 @@ pub mod os {
     pub mod unix {
         pub mod fs;
         pub mod io;
+        pub mod net;
+        pub mod process;
     }
     pub mod fd {
         pub use super::unix::io::{

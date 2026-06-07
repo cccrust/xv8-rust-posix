@@ -9,6 +9,7 @@ const ALL_TESTS: &[&str] = &[
     "/_async", "/_httpepoll", "/_axum",
     "/_shtest",
     "/_thread",
+    "/_thread_v3",
 ];
 
 static mut FILTER_BUF: [u8; 256] = [0; 256];

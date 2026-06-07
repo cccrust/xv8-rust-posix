@@ -1,4 +1,5 @@
 use alloc::string::String;
+use alloc::vec::Vec;
 use core::fmt;
 use core::str::FromStr;
 
@@ -381,4 +382,98 @@ impl FromRawFd for TcpListener {
     unsafe fn from_raw_fd(fd: i32) -> Self {
         Self { fd: fd as usize, addr: SocketAddr::new([0, 0, 0, 0], 0) }
     }
+}
+
+fn encode_dns_name(name: &str, buf: &mut [u8]) -> usize {
+    let mut pos = 0;
+    for label in name.split('.') {
+        if label.is_empty() { continue; }
+        if pos + 1 + label.len() > buf.len() { break; }
+        buf[pos] = label.len() as u8;
+        buf[pos + 1..pos + 1 + label.len()].copy_from_slice(label.as_bytes());
+        pos += 1 + label.len();
+    }
+    if pos < buf.len() { buf[pos] = 0; pos += 1; }
+    pos
+}
+
+fn parse_dns_name(data: &[u8], mut pos: usize) -> (String, usize) {
+    let mut name = String::new();
+    loop {
+        if pos >= data.len() { break; }
+        let len = data[pos] as usize;
+        if len == 0 { pos += 1; break; }
+        if (len & 0xC0) == 0xC0 {
+            let offset = (((len & 0x3F) as usize) << 8) | data[pos + 1] as usize;
+            let (suffix, _) = parse_dns_name(data, offset);
+            if !name.is_empty() { name.push('.'); }
+            name.push_str(&suffix);
+            pos += 2;
+            return (name, pos);
+        }
+        if pos + 1 + len > data.len() { break; }
+        if !name.is_empty() { name.push('.'); }
+        name.push_str(core::str::from_utf8(&data[pos + 1..pos + 1 + len]).unwrap_or(""));
+        pos += 1 + len;
+    }
+    (name, pos)
+}
+
+pub fn lookup_host(name: &str) -> io::Result<Vec<SocketAddr>> {
+    let mut addrs = Vec::new();
+    if let Some(ip) = parse_dotted_ip(name) {
+        addrs.push(SocketAddr { ip, port: 0 });
+        return Ok(addrs);
+    }
+    let server = [8, 8, 8, 8];
+    let port = 53u16;
+    let mut query = [0u8; 512];
+    query[0..12].copy_from_slice(&[
+        0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+    ]);
+    let qpos = encode_dns_name(name, &mut query[12..]);
+    let qtype_pos = 12 + qpos;
+    if qtype_pos + 4 > query.len() { return Err(ErrorKind::InvalidInput.into()); }
+    query[qtype_pos..qtype_pos + 4].copy_from_slice(&[0x00, 0x01, 0x00, 0x01]);
+    let qlen = qtype_pos + 4;
+
+    let sock = UdpSocket::bind(SocketAddr::new([0, 0, 0, 0], 0))?;
+    let dns_addr = SocketAddr::new(server, port);
+    sock.send_to(&query[..qlen], &dns_addr)?;
+
+    let mut resp = [0u8; 512];
+    let (n, _from) = sock.recv_from(&mut resp)?;
+    if n < 12 { return Err(ErrorKind::InvalidData.into()); }
+
+    let ancount = ((resp[6] as u16) << 8) | resp[7] as u16;
+    if ancount == 0 { return Ok(addrs); }
+
+    let mut pos = qtype_pos + 4;
+    let mut answers_left = ancount;
+    while pos < n && answers_left > 0 {
+        if (resp[pos] & 0xC0) == 0xC0 { pos += 2; } else { let (_, new_pos) = parse_dns_name(&resp, pos); pos = new_pos; }
+        if pos + 10 > n { break; }
+        let rtype = ((resp[pos] as u16) << 8) | resp[pos + 1] as u16;
+        let rdlen = ((resp[pos + 8] as u16) << 8) | resp[pos + 9] as u16;
+        pos += 10;
+        if rtype == 1 && rdlen == 4 && pos + 4 <= n {
+            addrs.push(SocketAddr { ip: [resp[pos], resp[pos + 1], resp[pos + 2], resp[pos + 3]], port: 0 });
+        }
+        pos += rdlen as usize;
+        answers_left -= 1;
+    }
+    Ok(addrs)
+}
+
+fn parse_dotted_ip(s: &str) -> Option<[u8; 4]> {
+    let parts: Vec<&str> = s.split('.').collect();
+    if parts.len() != 4 { return None; }
+    let mut ip = [0u8; 4];
+    for (i, part) in parts.iter().enumerate() {
+        let val: u16 = part.parse().ok()?;
+        if val > 255 { return None; }
+        ip[i] = val as u8;
+    }
+    Some(ip)
 }

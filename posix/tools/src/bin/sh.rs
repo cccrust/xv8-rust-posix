@@ -124,7 +124,7 @@ impl ShellContext {
     fn push_vars_to_env(&self) {
         for name in &self.exported {
             if let Some(val) = self.vars.get(name) {
-                env::set_var(name, val);
+                unsafe { env::set_var(name, val); }
             }
         }
     }
@@ -984,7 +984,7 @@ fn exec_builtin(cmd: &str, args: &[String], redirects: &[Redirect], ctx: &mut Sh
                     let val = &arg[eq+1..];
                     ctx.set_var(name, val);
                     ctx.mark_exported(name);
-                    env::set_var(name, val);
+                    unsafe { env::set_var(name, val); }
                 } else {
                     ctx.mark_exported(arg);
                 }

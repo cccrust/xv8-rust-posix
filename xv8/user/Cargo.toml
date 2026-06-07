@@ -153,6 +153,13 @@ doctest = false
 bench = false
 
 [[bin]]
+name = "_thread_v3"
+path = "testbin/thread_v3.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
 name = "_neteth"
 path = "testbin/neteth.rs"
 test = false

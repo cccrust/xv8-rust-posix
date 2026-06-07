@@ -519,6 +519,42 @@ pub fn stdin() -> Stdin { Stdin }
 pub fn stdout() -> Stdout { Stdout }
 pub fn stderr() -> Stderr { Stderr }
 
+pub struct Empty;
+pub struct Repeat(pub u8);
+pub struct Sink;
+
+impl Read for Empty {
+    fn read(&mut self, _buf: &mut [u8]) -> Result<usize> { Ok(0) }
+}
+
+impl Read for Repeat {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        for b in buf.iter_mut() { *b = self.0; }
+        Ok(buf.len())
+    }
+}
+
+impl Write for Sink {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> { Ok(buf.len()) }
+    fn flush(&mut self) -> Result<()> { Ok(()) }
+}
+
+pub fn empty() -> Empty { Empty }
+pub fn repeat(byte: u8) -> Repeat { Repeat(byte) }
+pub fn sink() -> Sink { Sink }
+
+pub fn copy<R: Read + ?Sized, W: Write + ?Sized>(reader: &mut R, writer: &mut W) -> Result<u64> {
+    let mut buf = [0u8; 4096];
+    let mut total = 0;
+    loop {
+        let n = reader.read(&mut buf)?;
+        if n == 0 { break; }
+        writer.write_all(&buf[..n])?;
+        total += n as u64;
+    }
+    Ok(total)
+}
+
 pub trait IsTerminal {
     fn is_terminal(&self) -> bool;
 }

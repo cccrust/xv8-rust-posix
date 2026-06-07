@@ -1,4 +1,5 @@
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::mem::size_of;
 use crate::io::Read;
 use crate::ffi::CString;
@@ -397,6 +398,38 @@ pub fn read_to_string<P: AsRef<super::path::Path>>(path: P) -> super::io::Result
     let mut reader = file;
     reader.read_to_string(&mut s)?;
     Ok(s)
+}
+
+pub fn canonicalize<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<super::path::PathBuf> {
+    let path_str = path.as_ref().to_str().ok_or(super::io::ErrorKind::InvalidInput)?;
+    let abs_path = if path_str.starts_with('/') {
+        path_str.to_string()
+    } else {
+        match super::env::var("PWD") {
+            Ok(cwd) => {
+                if cwd == "/" {
+                    format!("/{}", path_str)
+                } else {
+                    format!("{}/{}", cwd, path_str)
+                }
+            }
+            Err(_) => return Err(super::io::ErrorKind::NotFound.into()),
+        }
+    };
+    let mut components: Vec<&str> = Vec::new();
+    for component in abs_path.split('/') {
+        match component {
+            "" | "." => continue,
+            ".." => { components.pop(); }
+            _ => components.push(component),
+        }
+    }
+    let result = if components.is_empty() {
+        "/".to_string()
+    } else {
+        format!("/{}", components.join("/"))
+    };
+    Ok(super::path::PathBuf::from(result))
 }
 
 pub fn read_dir<P: AsRef<super::path::Path>>(path: P) -> super::io::Result<ReadDir> {

@@ -1,13 +1,17 @@
 use core::sync::atomic::{AtomicU32, Ordering};
+use core::str;
 
 use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::ffi::CString;
 
+use super::io::{self, ErrorKind};
 use super::time::Duration;
 
 const CLONE_VM: usize = 0x100;
 const CLONE_SIGHAND: usize = 0x80000;
 const CLONE_SETTLS: usize = 0x800;
-const STACK_SIZE: usize = 0x4000;
+const DEFAULT_STACK_SIZE: usize = 0x4000;
 const STACK_GUARD: usize = 256;
 
 const FUTEX_WAIT: u32 = 0;
@@ -20,6 +24,7 @@ const PARKED: u32 = 2;
 #[repr(C)]
 struct Tcb {
     park: AtomicU32,
+    name: usize,
     args_ptr: usize,
 }
 
@@ -37,7 +42,124 @@ fn current_park_addr() -> usize {
     if tp == 0 {
         &MAIN_PARK as *const AtomicU32 as usize
     } else {
-        tp // first field of Tcb is park
+        tp
+    }
+}
+
+fn current_name() -> Option<String> {
+    let tp: usize;
+    unsafe { core::arch::asm!("mv {}, tp", out(reg) tp) };
+    if tp == 0 {
+        return None;
+    }
+    unsafe {
+        let tcb = &*(tp as *const Tcb);
+        if tcb.name == 0 {
+            None
+        } else {
+            let cstr = core::ffi::CStr::from_ptr(tcb.name as *const core::ffi::c_char);
+            Some(cstr.to_str().ok()?.to_string())
+        }
+    }
+}
+
+pub struct Builder {
+    name: Option<String>,
+    stack_size: usize,
+}
+
+impl Builder {
+    pub fn new() -> Builder {
+        Builder { name: None, stack_size: DEFAULT_STACK_SIZE }
+    }
+
+    pub fn name(mut self, name: String) -> Builder {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn stack_size(mut self, size: usize) -> Builder {
+        self.stack_size = size;
+        self
+    }
+
+    pub fn spawn<F, T>(self, f: F) -> io::Result<JoinHandle<T>>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
+        let mut join_fds = [0usize; 2];
+        if xv8_libc::pipe(join_fds.as_mut_ptr()) < 0 {
+            return Err(io::Error::new(ErrorKind::Other, "spawn: pipe failed"));
+        }
+        let join_r = join_fds[0];
+        let join_w = join_fds[1];
+
+        let cname = self.name.as_ref().and_then(|n| CString::new(n.as_str()).ok());
+        let name_ptr = cname.as_ref().map(|c| c.as_ptr() as usize).unwrap_or(0);
+
+        let args = Box::new(Args {
+            f: Some(f),
+            result: None,
+            join_w,
+        });
+        let args_ptr = Box::into_raw(args);
+
+        let tcb = Box::new(Tcb {
+            park: AtomicU32::new(EMPTY),
+            name: name_ptr,
+            args_ptr: args_ptr as usize,
+        });
+        let tcb_ptr = Box::into_raw(tcb);
+        let park_addr = tcb_ptr as usize;
+
+        if cname.is_some() {
+            // leak CString so the pointer remains valid in child
+            core::mem::forget(cname);
+        }
+
+        let stack_base = xv8_libc::sbrk(self.stack_size as isize);
+        if stack_base < 0 {
+            let _ = unsafe { Box::from_raw(args_ptr) };
+            let _ = unsafe { Box::from_raw(tcb_ptr) };
+            let _ = xv8_libc::close(join_r);
+            let _ = xv8_libc::close(join_w);
+            return Err(io::Error::new(ErrorKind::Other, "spawn: sbrk failed"));
+        }
+        let stack_top = stack_base as usize + self.stack_size - STACK_GUARD;
+
+        let flags = CLONE_VM | CLONE_SIGHAND | CLONE_SETTLS;
+        let tid = xv8_libc::clone_tls(flags, stack_top, 0, tcb_ptr as usize);
+
+        if tid < 0 {
+            let _ = unsafe { Box::from_raw(args_ptr) };
+            let _ = unsafe { Box::from_raw(tcb_ptr) };
+            let _ = xv8_libc::close(join_r);
+            let _ = xv8_libc::close(join_w);
+            return Err(io::Error::new(ErrorKind::Other, "spawn: clone failed"));
+        }
+
+        if tid == 0 {
+            child_entry::<F, T>(tcb_ptr)
+        }
+
+        let _ = xv8_libc::close(join_w);
+
+        Ok(JoinHandle {
+            thread: Thread {
+                id: tid as usize,
+                join_fd: join_r,
+                park_addr,
+                name: self.name,
+            },
+            result_ptr: unsafe { &mut (*args_ptr).result as *mut Option<T> },
+        })
+    }
+}
+
+impl Default for Builder {
+    fn default() -> Builder {
+        Builder::new()
     }
 }
 
@@ -45,11 +167,16 @@ pub struct Thread {
     id: usize,
     join_fd: usize,
     park_addr: usize,
+    name: Option<String>,
 }
 
 impl Thread {
     pub fn id(&self) -> usize {
         self.id
+    }
+
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     pub fn unpark(&self) {
@@ -62,7 +189,7 @@ impl Thread {
 
 pub fn current() -> Thread {
     let id = xv8_libc::gettid() as usize;
-    Thread { id, join_fd: 0, park_addr: current_park_addr() }
+    Thread { id, join_fd: 0, park_addr: current_park_addr(), name: current_name() }
 }
 
 pub fn spawn<F, T>(f: F) -> JoinHandle<T>
@@ -70,47 +197,7 @@ where
     F: FnOnce() -> T + Send + 'static,
     T: Send + 'static,
 {
-    let mut join_fds = [0usize; 2];
-    let ret = xv8_libc::pipe(join_fds.as_mut_ptr());
-    assert!(ret >= 0, "spawn: join pipe");
-    let join_r = join_fds[0];
-    let join_w = join_fds[1];
-
-    let args = Box::new(Args {
-        f: Some(f),
-        result: None,
-        join_w,
-    });
-    let args_ptr = Box::into_raw(args);
-
-    let tcb = Box::new(Tcb { park: AtomicU32::new(EMPTY), args_ptr: args_ptr as usize });
-    let tcb_ptr = Box::into_raw(tcb);
-    let park_addr = tcb_ptr as usize; // park is first field of Tcb
-
-    let stack_base = xv8_libc::sbrk(STACK_SIZE as isize) as usize;
-    let stack_top = stack_base + STACK_SIZE - STACK_GUARD;
-
-    let flags = CLONE_VM | CLONE_SIGHAND | CLONE_SETTLS;
-    let tid = xv8_libc::clone_tls(flags, stack_top, 0, tcb_ptr as usize);
-
-    if tid < 0 {
-        let _ = unsafe { Box::from_raw(args_ptr) };
-        let _ = unsafe { Box::from_raw(tcb_ptr) };
-        let _ = xv8_libc::close(join_r);
-        let _ = xv8_libc::close(join_w);
-        panic!("spawn: clone failed");
-    }
-
-    if tid == 0 {
-        child_entry::<F, T>(tcb_ptr)
-    }
-
-    let _ = xv8_libc::close(join_w);
-
-    JoinHandle {
-        thread: Thread { id: tid as usize, join_fd: join_r, park_addr },
-        result_ptr: unsafe { &mut (*args_ptr).result as *mut Option<T> },
-    }
+    Builder::new().spawn(f).expect("spawn failed")
 }
 
 #[inline(never)]

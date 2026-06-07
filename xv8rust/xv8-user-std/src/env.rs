@@ -57,7 +57,7 @@ pub fn set_current_dir(path: &super::path::Path) -> super::io::Result<()> {
     if n < 0 {
         Err(super::io::ErrorKind::Other.into())
     } else {
-        set_var("PWD", path_str);
+        unsafe { set_var("PWD", path_str); }
         Ok(())
     }
 }
@@ -73,13 +73,13 @@ pub fn var(key: &str) -> Result<String, VarError> {
     String::from_utf8(value.to_vec()).map_err(|_| VarError::NotUnicode(String::from_utf8_lossy(value).to_string()))
 }
 
-pub fn set_var(key: &str, value: &str) {
+pub unsafe fn set_var(key: &str, value: &str) {
     if let (Ok(c_key), Ok(c_value)) = (CString::new(key), CString::new(value)) {
         let _ = xv8_libc::setenv(c_key.as_ptr() as *const u8, c_value.as_ptr() as *const u8, 1);
     }
 }
 
-pub fn remove_var(key: &str) {
+pub unsafe fn remove_var(key: &str) {
     if let Ok(c_key) = CString::new(key) {
         let _ = xv8_libc::unsetenv(c_key.as_ptr() as *const u8);
     }

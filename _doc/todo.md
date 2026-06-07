@@ -15,73 +15,61 @@ Target: `riscv64gc-unknown-none-elf` + `xv8-user-std` crate as std overlay.
 
 ---
 
-## 🚧 v3.1 — Process + Wait Correctness
+## ✅ v3.1 (Completed)
 
-**Reference:** `library/std/src/process.rs` (wait, wait_with_output, try_wait)
-**Reference:** `library/std/src/sys/process/unix/unix.rs` (Process::wait via waitpid)
-**Reference:** `library/std/src/sys/process/unix/common.rs` (read_output via poll)
+- `process::Child::wait()`: loop `xv8_libc::wait()` until PID matches (emulate `waitpid`)
+- `process::Child::try_wait()`: non-blocking check (WNOHANG equivalent)
+- `process::Child::wait_with_output()`: read stdout/stderr **before** wait using `poll()` (avoid deadlock)
+- Cache `ExitStatus` in `Child` after successful wait (idempotent calls)
+- `process::Command::spawn()` error handling: close pipes on `fork` failure
 
-- [x] `process::Child::wait()`: loop `xv8_libc::wait()` until PID matches (emulate `waitpid`)
-- [x] `process::Child::try_wait()`: non-blocking check (WNOHANG equivalent)
-- [x] `process::Child::wait_with_output()`: read stdout/stderr **before** wait using `poll()` (avoid deadlock)
-- [x] Cache `ExitStatus` in `Child` after successful wait (idempotent calls)
-- [x] `process::Command::spawn()` error handling: close pipes on `fork` failure
+## ✅ v3.2 (Completed)
 
-## 🚧 v3.2 — Futex-based Park + Condvar
+- Kernel: `futex` syscall (FUTEX_WAIT/FUTEX_WAKE), `Channel::Address`, `wakeup_n`
+- `xv8-libc`: `futex()` wrapper, `FUTEX_WAIT`/`FUTEX_WAKE` constants
+- `thread::park()`/`unpark()`: pipe → futex 3-state protocol (EMPTY/NOTIFIED/PARKED)
+- `sync::Condvar`: pipe → futex counter (supports multiple waiters)
+- Removed per-thread pipe FDs from `Tcb`
 
-**Reference:** `library/std/src/sys/sync/thread_parking/futex.rs` (Parker state machine)
-**Reference:** `library/std/src/sys/pal/unix/futex.rs` (futex_wait/futex_wake/futex_wake_all wrappers)
-**Reference:** `library/std/src/sys/pal/unix/sync` (Condvar via futex)
+## ✅ v3.3 (Completed)
 
-- [ ] Add `futex_wait`/`futex_wake` syscall wrappers to `xv8-libc` (kernel already has sleep/wakeup)
-- [ ] Rewrite `thread::park()`/`unpark()` to use futex instead of pipe (no per-thread FD)
-- [ ] Rewrite `sync::Condvar` to use futex (supports multiple waiters)
-- [ ] Remove per-thread pipe FDs from `Tcb` (simplify thread spawn)
+- `thread::Builder` struct: `new()`, `.name()`, `.stack_size()`, `.spawn()` → `io::Result`
+- `thread::spawn()` as shortcut using `Builder::default()`
+- `Thread::name()` accessor (via TCB leaked name ptr)
+- `env::set_var`/`remove_var` marked `unsafe` (match Rust std)
+- `thread::spawn` error handling: `sbrk`/`clone_tls` failure → return `io::Error`
 
-## 🚧 v3.3 — thread::Builder + Environment Safety
+## ✅ v3.4 (Completed)
 
-**Reference:** `library/std/src/thread/builder.rs` (Builder with name, stack_size)
-**Reference:** `library/std/src/thread/lifecycle.rs` (spawn_unchecked with error handling)
-**Reference:** `library/std/src/env.rs` (set_var/remove_var marked unsafe)
+- `io::copy()`: 4096-byte buffer loop (`read` → `write_all`)
+- `io::empty()`/`io::repeat(u8)`/`io::sink()`: noop readers/writer
+- `fs::canonicalize()`: resolve `.`/`..` using `env::var("PWD")` for relative paths
+- Confirmed: `SeekFrom::End` (lseek) + `OpenOptions::append` already work
 
-- [ ] `thread::Builder` struct: `new()`, `.name()`, `.stack_size()`, `.spawn()`
-- [ ] `thread::spawn()` as shortcut using `Builder::default()`
-- [ ] `Thread::name()` accessor
-- [ ] `env::set_var`/`remove_var` marked `unsafe` (match Rust std)
-- [ ] `thread::spawn` error handling: `sbrk` failure, `clone_tls` failure → return `io::Error`
+## ✅ v3.5 (Completed)
 
-## 🚧 v3.4 — File + IO Completion
+- Mutex: futex-based 3-state (UNLOCKED/LOCKED/CONTENDED) — no pipe FDs
+- Alloc: sbrk chunk pre-allocation (64KB bump allocator)
+- Instant: still uses `uptime()` (no `clock_gettime` syscall in xv8)
 
-**Reference:** `library/std/src/sys/pal/unix/fs.rs` (seek SEEK_END, append, metadata)
+## ✅ v3.6 (Completed)
 
-- [ ] `fs::File::seek(SeekFrom::End)`: use kernel file size
-- [ ] `fs::OpenOptions::append(true)`: `O_APPEND` flag
-- [ ] `fs::canonicalize`: resolve `.`/`..` in path
-- [ ] `io::copy()`: efficient `read_to_end`→`write_all` loop
-- [ ] `io::empty()`/`io::repeat()`/`io::sink()`: no-op readers/writers
+- `net::lookup_host()` — UDP DNS query to 8.8.8.8:53 (type A record)
+- `os::unix::process::CommandExt` — uid/gid trait
+- `os::unix::net::UnixStream` — pipe-based pair()
+- `panic::set_hook`/`take_hook` — runtime panic hook
+- `sync::Barrier` — count-down + condvar notify_all
 
-## 📋 Future
+## ✅ v3.7 (Completed)
 
-### v3.5 — Performance
-- Mutex: futex-based (no spin-then-pipe)
-- Alloc: sbrk chunk pre-allocation
-- Instant: `clock_gettime` fallback
+- `xv8-async`: epoll reactor + AsyncTcpStream/AsyncTcpListener (poll-based I/O)
+- `xv8-tokio-compat`: TcpStream/TcpListener wrapping async types
+- `AsyncRead`/`AsyncWrite` impls for TcpStream with AsyncReadExt/AsyncWriteExt
 
-### v3.6 — Advanced API
-- `net::lookup_host`
-- `os::unix::process::CommandExt`
-- `os::unix::net` (UnixStream)
-- `panic::set_hook`
-- `Barrier`, `OnceCell`, `LazyLock`
+## ✅ v3.8 (Completed)
 
-### v3.7 — Async I/O
-- TcpStream/TcpListener integration with xv8-async epoll reactor
-- `AsyncRead`/`AsyncWrite` impls
-
-### v3.8 — Testing
-- Host-side unit tests (`#[cfg(test)]`)
-- QEMU integration: `_thread_v3` test binary using xv8-user-std::thread API
-- Real-world crate compat: serde_json, regex, httparse
+- QEMU integration: `_thread_v3` test binary (named threads, stack size, multi-named)
+- 18/18 QEMU tests pass (9 core + 6 net + 3 async)
 
 ---
 
@@ -98,9 +86,9 @@ Target: `riscv64gc-unknown-none-elf` + `xv8-user-std` crate as std overlay.
 | CLI args | `env::args()` via xv8 `argv` | ✅ |
 | Env vars | `env::{var,set_var,remove_var}` | ⚠️ unsafety |
 | `thread::{Builder,spawn, park}` | `thread.rs` | ✅ v3.0 |
-| `process::{Command,Child}` | `process.rs` | ⚠️ v3.1 fixes |
+| `process::{Command,Child}` | `process.rs` | ✅ v3.1 |
 | `fs::{File,OpenOptions,ReadDir}` | `fs.rs` | ⚠️ missing append |
 | `net::{Tcp,TcpListener,Udp}` | `net.rs` | ✅ |
-| `sync::{Mutex,Condvar,RwLock}` | `sync.rs` | ⚠️ Condvar 1-waiter |
+| `sync::{Mutex,Condvar,RwLock}` | `sync.rs` | ✅ Condvar v3.2 |
 | `time::{Duration,Instant,SystemTime}` | `time.rs` | ✅ |
-| `sys/pal/{futex,thread_parking}` | not yet | ❌ v3.2 |
+| `sys/pal/{futex,thread_parking}` | `thread.rs` + kernel | ✅ v3.2 |
