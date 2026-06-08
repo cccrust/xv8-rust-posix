@@ -562,6 +562,10 @@ pub mod raw {
     pub fn overlay_umount(mount_point: *const u8) -> isize {
         syscall1(Syscall::OverlayUmount, mount_point as usize)
     }
+
+    pub fn pivot_root(new_root: *const u8, put_old: *const u8) -> isize {
+        syscall2(Syscall::PivotRoot, new_root as usize, put_old as usize)
+    }
 }
 
 use kernel::abi::{MAXPATH, Stat, SysError};
@@ -1181,6 +1185,18 @@ pub fn overlay_umount(mount_point: &str) -> Result<(), SysError> {
     buf[..len].copy_from_slice(mount_point.as_bytes());
     buf[len] = 0;
     check_unit(raw::overlay_umount(buf.as_ptr()))
+}
+
+pub fn pivot_root(new_root: &str, put_old: &str) -> Result<(), SysError> {
+    let mut nr_buf = [0u8; 256];
+    let mut po_buf = [0u8; 256];
+    let nr_len = new_root.len().min(255);
+    let po_len = put_old.len().min(255);
+    nr_buf[..nr_len].copy_from_slice(new_root.as_bytes());
+    nr_buf[nr_len] = 0;
+    po_buf[..po_len].copy_from_slice(put_old.as_bytes());
+    po_buf[po_len] = 0;
+    check_unit(raw::pivot_root(nr_buf.as_ptr(), po_buf.as_ptr()))
 }
 
 pub fn seccomp_kill() -> Result<(), SysError> {

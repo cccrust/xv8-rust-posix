@@ -1,6 +1,7 @@
 use core::sync::atomic::{AtomicU16, Ordering};
 
 use alloc::format;
+use alloc::string::String;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -44,7 +45,7 @@ impl core::fmt::Display for InterfaceId {
 #[derive(Debug, Clone)]
 pub struct InterfaceConfig {
     /// Name
-    pub name: &'static str,
+    pub name: alloc::string::String,
     /// MAC address
     pub mac: MacAddr,
     /// IPv4 configuration, if configured.
@@ -84,7 +85,7 @@ pub fn register_interface(config: InterfaceConfig, device: Arc<dyn NetDevice>) -
     };
 
     let needs_dhcp = device.needs_dhcp();
-    let name = config.name;
+    let name = config.name.clone();
 
     INTERFACES
         .lock()

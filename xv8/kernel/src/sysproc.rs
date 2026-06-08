@@ -2,6 +2,7 @@ use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use crate::fs::{FsError, InodeType, Path};
 use crate::memlayout::QEMU_POWER;
 use crate::param::MMAP_BASE;
 use crate::proc::{self, Channel, Pid, ProcState, current_proc, current_proc_and_data_mut, wakeup_n};
@@ -1564,4 +1565,48 @@ pub fn sys_overlay_mount(args: &SyscallArgs) -> Result<usize, SysError> {
 pub fn sys_overlay_umount(args: &SyscallArgs) -> Result<usize, SysError> {
     let mp = args.fetch_string(args.get_addr(0), 256)?;
     crate::overlay::sys_umount(&mp)
+}
+
+pub fn sys_pivot_root(args: &SyscallArgs) -> Result<usize, SysError> {
+    let new_root_str = args.fetch_string(args.get_addr(0), 256)?;
+    let put_old_str = args.fetch_string(args.get_addr(1), 256)?;
+
+    // Resolve new_root (must be a directory)
+    let new_root_inode = Path::new(&new_root_str)
+        .resolve()
+        .map_err(|_| SysError::InvalidArgument)?;
+
+    let new_root_inum = new_root_inode.inum;
+    {
+        let inner = new_root_inode.lock();
+        if inner.r#type != InodeType::Directory {
+            new_root_inode.unlock_put(inner);
+            return Err(SysError::InvalidArgument);
+        }
+    }
+
+    // Resolve put_old (must be a directory under new_root)
+    let put_old_inode = Path::new(&put_old_str)
+        .resolve()
+        .map_err(|_| SysError::InvalidArgument)?;
+
+    {
+        let inner = put_old_inode.lock();
+        if inner.r#type != InodeType::Directory {
+            put_old_inode.unlock_put(inner);
+            new_root_inode.put();
+            return Err(SysError::InvalidArgument);
+        }
+    }
+
+    put_old_inode.put();
+
+    // Set process root to new_root
+    let (_proc, mut data) = current_proc_and_data_mut();
+    if let Some(old_root) = data.root.take() {
+        old_root.put();
+    }
+    data.root = Some(new_root_inode);
+
+    Ok(0)
 }

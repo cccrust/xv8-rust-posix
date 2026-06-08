@@ -1005,9 +1005,20 @@ impl<'a> Path<'a> {
 
     fn resolve_inner(&self, parent: bool) -> Result<(Inode, &'a str), FsError> {
         let mut inode = if self.is_absolute() {
-            try_log!(Inode::get(ROOTDEV, ROOTINO))
+            match proc::current_proc_opt() {
+                Some(proc) => {
+                    let data = proc.data();
+                    match data.root.as_ref() {
+                        Some(root) => root.dup(),
+                        None => try_log!(Inode::get(ROOTDEV, ROOTINO)),
+                    }
+                }
+                None => try_log!(Inode::get(ROOTDEV, ROOTINO)),
+            }
         } else {
-            proc::current_proc().data().cwd.dup()
+            let proc = proc::current_proc_opt()
+                .expect("relative path resolution requires a current process");
+            proc.data().cwd.dup()
         };
 
         let mut name = "";

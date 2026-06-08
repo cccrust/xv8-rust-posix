@@ -478,10 +478,15 @@ match inner_copy.r#type {
             FileType::Device { .. } => err!(SysError::NotImplemented),
 
             FileType::Socket { socket_id } => {
-                if cmd == Ioctl::SOCKET_GET_PORT {
-                    Ok(SocketTable::get_port_number(*socket_id) as usize)
-                } else {
-                    err!(SysError::NotImplemented)
+                match cmd {
+                    Ioctl::SOCKET_GET_PORT => {
+                        Ok(SocketTable::get_port_number(*socket_id) as usize)
+                    }
+                    Ioctl::XV8_VETH_CREATE => {
+                        drop(file_inner);
+                        crate::net::veth::ioctl_create_veth(VA::new(arg))
+                    }
+                    _ => err!(SysError::NotImplemented),
                 }
             }
 
@@ -631,6 +636,7 @@ impl Ioctl {
     pub const CONSOLE_SET_FG_PID: usize = 2;
 
     pub const SOCKET_GET_PORT: usize = 3;
+    pub const XV8_VETH_CREATE: usize = 100;
 }
 
 /// Console device major number

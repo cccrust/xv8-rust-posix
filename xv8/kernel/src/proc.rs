@@ -394,6 +394,8 @@ pub struct ProcData {
     pub open_files: Option<Arc<FdTable>>,
     /// Current directory
     pub cwd: Inode,
+    /// Process root (None = use ROOTINO)
+    pub root: Option<Inode>,
     /// Process name
     pub name: String,
     /// Signal state
@@ -447,6 +449,7 @@ impl ProcData {
             context: Context::new(),
             open_files: None,
             cwd: Inode::new(0, 0, 0),
+            root: None,
             name: String::new(),
             signals: signal::SignalState::new(),
             pgrp: Pid(0),
@@ -913,6 +916,7 @@ pub fn fork() -> Result<Pid, KernelError> {
     // share or duplicate file descriptors
     new_data.open_files = Some(FdTable::dup_from(data.open_files.as_ref().unwrap()));
     new_data.cwd = data.cwd.dup();
+    new_data.root = data.root.as_ref().map(|r| r.dup());
 
     new_data.name = data.name.clone();
 
@@ -1059,6 +1063,10 @@ pub fn clone_proc(flags: usize, stack: usize, tls: usize) -> Result<Pid, KernelE
     } else {
         new_inner.tgid = new_inner.pid;
     }
+
+    // inherit current directory and root
+    new_data.cwd = data.cwd.dup();
+    new_data.root = data.root.as_ref().map(|r| r.dup());
 
     // inherit parent's namespaces (share by default)
     new_data.ns = data.ns.clone();

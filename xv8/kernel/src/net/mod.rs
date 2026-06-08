@@ -23,6 +23,7 @@ pub(crate) mod loopback;
 pub(crate) mod route;
 pub(crate) mod udp;
 pub(crate) mod tcp;
+pub(crate) mod veth;
 
 const OUTGOING_QUEUE_SIZE: usize = 16;
 const INCOMING_QUEUE_SIZE: usize = 16;

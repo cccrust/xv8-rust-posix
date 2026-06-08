@@ -41,7 +41,7 @@ pub fn init() {
 
     let interface_id = interface::register_interface(
         InterfaceConfig {
-            name: "lo",
+            name: alloc::string::String::from("lo"),
             mac: MacAddr::UNSPECIFIED,
             ipv4: Some(Ipv4Config {
                 addr: Ipv4Addr([127, 0, 0, 1]),

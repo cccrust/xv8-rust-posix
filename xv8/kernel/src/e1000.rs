@@ -365,7 +365,7 @@ pub unsafe fn init() {
     // register the network interface with the network stack
     let interface_id = interface::register_interface(
         InterfaceConfig {
-            name: "e1000",
+            name: alloc::string::String::from("e1000"),
             mac: MacAddr([0x52, 0x54, 0x00, 0x12, 0x34, 0x56]),
             ipv4: Some(Ipv4Config {
                 addr: Ipv4Addr([10, 0, 2, 15]),

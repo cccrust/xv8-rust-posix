@@ -334,6 +334,34 @@ test = false
 doctest = false
 bench = false
 
+[[bin]]
+name = "_veth"
+path = "testbin/veth.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_pivot_root"
+path = "testbin/pivot_root.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "xv8-container"
+path = "bin/xv8_container.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_container"
+path = "testbin/container.rs"
+test = false
+doctest = false
+bench = false
+
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
 xv8-tokio-compat = { path = "../../xv8rust/xv8-tokio-compat" }
