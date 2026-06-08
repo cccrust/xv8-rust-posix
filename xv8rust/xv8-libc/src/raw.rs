@@ -78,6 +78,13 @@ pub enum Syscall {
     TimerFdGettime = 128,
     MemFdCreate = 129,
     PidFdOpen = 130,
+    SetNs = 140,
+    Unshare = 141,
+    Sethostname = 146,
+    Gethostname = 147,
+    CapGet = 142,
+    CapSet = 143,
+    Seccomp = 144,
 }
 
 #[inline(always)]
@@ -530,4 +537,32 @@ pub fn memfd_create(name: usize, flags: u32) -> isize {
 
 pub fn pidfd_open(pid: usize, flags: u32) -> isize {
     syscall2(Syscall::PidFdOpen, pid, flags as usize)
+}
+
+pub fn setns(fd: usize, nstype: u32) -> isize {
+    syscall2(Syscall::SetNs, fd, nstype as usize)
+}
+
+pub fn unshare(flags: usize) -> isize {
+    syscall1(Syscall::Unshare, flags)
+}
+
+pub fn sethostname(name: *const u8, len: usize) -> isize {
+    syscall2(Syscall::Sethostname, name as usize, len)
+}
+
+pub fn gethostname(buf: *mut u8, len: usize) -> isize {
+    syscall2(Syscall::Gethostname, buf as usize, len)
+}
+
+pub fn capget(hdr: *const usize, data: *mut usize) -> isize {
+    syscall2(Syscall::CapGet, hdr as usize, data as usize)
+}
+
+pub fn capset(hdr: *const usize, data: *const usize) -> isize {
+    syscall2(Syscall::CapSet, hdr as usize, data as usize)
+}
+
+pub fn seccomp(op: usize, flags: usize, args: *const u8) -> isize {
+    syscall3(Syscall::Seccomp, op, flags, args as usize)
 }

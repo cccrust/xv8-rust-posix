@@ -242,10 +242,16 @@ match inner_copy.r#type {
                 }
             }
 
-            FileType::Device { inode: _, major } => match &DEVICES[*major as usize] {
-                Some(dev) => (dev.read)(addr, n),
-                None => err!(SysError::NoEntry),
-            },
+            FileType::Device { inode: _, major } => {
+                match *major as usize {
+                    CONSOLE => (DEVICES[CONSOLE].unwrap().read)(addr, n),
+                    CGROUP_DEV => crate::cgroup::device_read(addr, n),
+                    _ => match &DEVICES[*major as usize] {
+                        Some(dev) => (dev.read)(addr, n),
+                        None => err!(SysError::NoEntry),
+                    },
+                }
+            }
 
             FileType::Socket { socket_id: _ } | FileType::TcpSocket { tcp_id: _ } => {
                 // reads from socket should go through recv()
@@ -397,10 +403,16 @@ match inner_copy.r#type {
                 }
             }
 
-            FileType::Device { inode: _, major } => match &DEVICES[*major as usize] {
-                Some(dev) => (dev.write)(addr, n),
-                None => err!(SysError::NoEntry),
-            },
+            FileType::Device { inode: _, major } => {
+                match *major as usize {
+                    CONSOLE => (DEVICES[CONSOLE].unwrap().write)(addr, n),
+                    CGROUP_DEV => crate::cgroup::device_write(addr, n),
+                    _ => match &DEVICES[*major as usize] {
+                        Some(dev) => (dev.write)(addr, n),
+                        None => err!(SysError::NoEntry),
+                    },
+                }
+            }
 
             FileType::Socket { socket_id: _ } | FileType::TcpSocket { tcp_id: _ } => {
                 // writes to socket should go through send()
@@ -459,6 +471,9 @@ match inner_copy.r#type {
         match &file_inner.r#type {
             FileType::Device { major, .. } if *major as usize == CONSOLE => {
                 Console::ioctl(cmd, arg)
+            }
+            FileType::Device { major, .. } if *major as usize == CGROUP_DEV => {
+                err!(SysError::NotImplemented)
             }
             FileType::Device { .. } => err!(SysError::NotImplemented),
 
@@ -620,6 +635,9 @@ impl Ioctl {
 
 /// Console device major number
 pub const CONSOLE: usize = 1;
+
+/// Cgroup device major number
+pub const CGROUP_DEV: usize = 2;
 
 /// Device table
 pub static DEVICES: [Option<Device>; NDEV] = {

@@ -12,6 +12,10 @@ fn main(_args: Args) {
         open("console", OpenFlag::READ_WRITE).expect("init: cannot open console");
     }
 
+    if open("cgroup", OpenFlag::READ_WRITE).is_err() {
+        mknod("cgroup", CGROUP_DEV, 0).expect("init: cannot create cgroup");
+    }
+
     dup(Fd::STDIN).expect("init: dup stdout");
     dup(Fd::STDIN).expect("init: dup stderr");
 

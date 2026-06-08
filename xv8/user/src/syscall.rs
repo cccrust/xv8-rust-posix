@@ -526,6 +526,34 @@ pub mod raw {
     pub fn timerfd_gettime(fd: usize, curr_val: usize) -> isize {
         syscall2(Syscall::TimerFdGettime, fd, curr_val)
     }
+
+    pub fn setns(fd: usize, nstype: u32) -> isize {
+        syscall2(Syscall::SetNs, fd, nstype as usize)
+    }
+
+    pub fn unshare(flags: usize) -> isize {
+        syscall1(Syscall::Unshare, flags)
+    }
+
+    pub fn sethostname(name: *const u8, len: usize) -> isize {
+        syscall2(Syscall::Sethostname, name as usize, len)
+    }
+
+    pub fn gethostname(buf: *mut u8, len: usize) -> isize {
+        syscall2(Syscall::Gethostname, buf as usize, len)
+    }
+
+    pub fn capget(hdr: *const usize, data: *mut usize) -> isize {
+        syscall2(Syscall::CapGet, hdr as usize, data as usize)
+    }
+
+    pub fn capset(hdr: *const usize, data: *const usize) -> isize {
+        syscall2(Syscall::CapSet, hdr as usize, data as usize)
+    }
+
+    pub fn seccomp(op: usize, flags: usize, args: *const u8) -> isize {
+        syscall3(Syscall::Seccomp, op, flags, args as usize)
+    }
 }
 
 use kernel::abi::{MAXPATH, Stat, SysError};
@@ -1078,4 +1106,54 @@ pub fn timerfd_settime(fd: Fd, flags: u32, new_val: usize) -> Result<(), SysErro
 
 pub fn timerfd_gettime(fd: Fd, curr_val: usize) -> Result<(), SysError> {
     check_unit(raw::timerfd_gettime(fd.as_raw(), curr_val))
+}
+
+pub fn setns(fd: Fd, nstype: u32) -> Result<(), SysError> {
+    check_unit(raw::setns(fd.as_raw(), nstype))
+}
+
+pub fn unshare(flags: usize) -> Result<(), SysError> {
+    check_unit(raw::unshare(flags))
+}
+
+pub fn sethostname(name: &[u8]) -> Result<(), SysError> {
+    check_unit(raw::sethostname(name.as_ptr(), name.len()))
+}
+
+pub fn gethostname(buf: &mut [u8]) -> Result<usize, SysError> {
+    let ret = raw::gethostname(buf.as_mut_ptr(), buf.len());
+    if ret < 0 {
+        Err(SysError::from_code((-ret) as u16))
+    } else {
+        Ok(ret as usize)
+    }
+}
+
+pub fn cap_get_pid(_pid: u32) -> Result<u64, SysError> {
+    let mut data = [0usize; 3];
+    check_unit(raw::capget(core::ptr::null(), data.as_mut_ptr()))?;
+    Ok(data[0] as u64)
+}
+
+pub fn cap_set(effective: u64, permitted: u64, inheritable: u64) -> Result<(), SysError> {
+    let data = [effective as usize, permitted as usize, inheritable as usize];
+    check_unit(raw::capset(core::ptr::null(), data.as_ptr()))
+}
+
+pub fn seccomp_filter(filter: &[u8]) -> Result<(), SysError> {
+    let ptr = filter.as_ptr() as usize;
+    // sock_fprog: u16 len + 6 bytes padding (riscv64) + u64 ptr
+    let mut buf = [0u8; 16];
+    buf[0..2].copy_from_slice(&(filter.len() as u16).to_ne_bytes());
+    buf[8..16].copy_from_slice(&ptr.to_ne_bytes());
+    check_unit(raw::seccomp(2, 0, buf.as_ptr()))
+}
+
+pub fn seccomp_kill() -> Result<(), SysError> {
+    // SECCOMP_SET_MODE_FILTER(2) with a filter that always kills
+    let filter: [u8; 8] = [
+        0x06, 0x00, 0x00, 0x00,  // ret
+        0x00, 0x00, 0x00, 0x80,  // SECCOMP_RET_KILL_PROCESS
+    ];
+    seccomp_filter(&filter)
 }

@@ -1,5 +1,5 @@
 // Exports common ABI types and constants for use by userspace programs.
-pub use crate::file::{CONSOLE, Ioctl, OpenFlag};
+pub use crate::file::{CONSOLE, CGROUP_DEV, Ioctl, OpenFlag};
 pub use crate::fs::{DIRSIZE, Directory, InodeType, Stat};
 pub use crate::net::Ipv4Addr;
 pub use crate::param::MAXPATH;
@@ -12,3 +12,4 @@ pub use crate::inotify::{InotifyEvent, IN_ACCESS, IN_MODIFY, IN_ATTRIB, IN_CLOSE
 pub use crate::signalfd::{SignalfdSiginfo, SFD_CLOEXEC, SFD_NONBLOCK};
 pub use crate::timerfd::{Itimerspec, Timespec, TFD_CLOEXEC, TFD_NONBLOCK, TFD_TIMER_ABSTIME};
 pub use crate::signal::{CLOCK_REALTIME, CLOCK_MONOTONIC};
+pub use crate::namespace::{CLONE_NEWNS, CLONE_NEWCGROUP, CLONE_NEWUTS, CLONE_NEWIPC, CLONE_NEWUSER, CLONE_NEWPID, CLONE_NEWNET, CLONE_NEW_ALL};

@@ -400,6 +400,13 @@ pub enum Syscall {
     InotifyInit1 = 137,
     InotifyAddWatch = 138,
     InotifyRmWatch = 139,
+    SetNs = 140,
+    Unshare = 141,
+    CapGet = 142,
+    CapSet = 143,
+    Seccomp = 144,
+    Sethostname = 146,
+    Gethostname = 147,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -545,6 +552,13 @@ impl TryFrom<usize> for Syscall {
             137 => Ok(Syscall::InotifyInit1),
             138 => Ok(Syscall::InotifyAddWatch),
             139 => Ok(Syscall::InotifyRmWatch),
+            140 => Ok(Syscall::SetNs),
+            141 => Ok(Syscall::Unshare),
+             142 => Ok(Syscall::CapGet),
+             143 => Ok(Syscall::CapSet),
+             144 => Ok(Syscall::Seccomp),
+             146 => Ok(Syscall::Sethostname),
+             147 => Ok(Syscall::Gethostname),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -558,6 +572,16 @@ impl TryFrom<usize> for Syscall {
 pub unsafe fn syscall(trapframe: &mut TrapFrame) {
     let proc = current_proc();
     let args = SyscallArgs::new(trapframe, proc);
+
+    // Seccomp filter check (skip for seccomp syscall itself)
+    if trapframe.a7 != 144 {
+        match crate::seccomp::seccomp_check(trapframe.a7) {
+            crate::seccomp::SeccompAction::Kill => {
+                crate::proc::exit(-1);
+            }
+            crate::seccomp::SeccompAction::Allow => {}
+        }
+    }
 
     let result = match Syscall::try_from(trapframe.a7) {
         Ok(syscall) => match syscall {
@@ -698,6 +722,13 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::InotifyInit1 => sys_inotify_init1(&args),
             Syscall::InotifyAddWatch => sys_inotify_add_watch(&args),
             Syscall::InotifyRmWatch => sys_inotify_rm_watch(&args),
+            Syscall::SetNs => sys_setns(&args),
+            Syscall::Unshare => sys_unshare(&args),
+            Syscall::Sethostname => sys_sethostname(&args),
+            Syscall::Gethostname => sys_gethostname(&args),
+            Syscall::CapGet => sys_capget(&args),
+            Syscall::CapSet => sys_capset(&args),
+            Syscall::Seccomp => sys_seccomp(&args),
         },
         Err(e) => Err(e),
     };

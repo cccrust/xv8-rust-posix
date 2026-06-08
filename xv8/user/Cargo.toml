@@ -285,6 +285,48 @@ test = false
 doctest = false
 bench = false
 
+[[bin]]
+name = "_ns_pid"
+path = "testbin/ns_pid.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_ns_uts"
+path = "testbin/ns_uts.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_setns"
+path = "testbin/setns.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_cgroup"
+path = "testbin/cgroup.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_capability"
+path = "testbin/capabilities.rs"
+test = false
+doctest = false
+bench = false
+
+[[bin]]
+name = "_seccomp"
+path = "testbin/seccomp.rs"
+test = false
+doctest = false
+bench = false
+
 [dependencies]
 kernel = { package = "xv8", path = "../kernel", version = "1.0.0" }
 xv8-tokio-compat = { path = "../../xv8rust/xv8-tokio-compat" }

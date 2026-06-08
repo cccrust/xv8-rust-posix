@@ -19,6 +19,12 @@ const ALL_TESTS: &[&str] = &[
     "/_inotify",
     "/_signalfd",
     "/_timerfd",
+    "/_ns_pid",
+    "/_ns_uts",
+    "/_setns",
+    "/_cgroup",
+    "/_capability",
+    "/_seccomp",
 ];
 
 static mut FILTER_BUF: [u8; 256] = [0; 256];

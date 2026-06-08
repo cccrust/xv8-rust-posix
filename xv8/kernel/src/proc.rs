@@ -18,6 +18,9 @@ use crate::memlayout::{TRAMPOLINE, TRAPFRAME, kstack};
 use crate::param::{NCPU, NKSTACK_PAGES, NOFILE, NPROC, ROOTDEV};
 use crate::signal;
 use crate::riscv::{PGSIZE, PTE_R, PTE_W, PTE_X, interrupts, registers::tp};
+use crate::namespace;
+use crate::capability::CapabilityState;
+use crate::seccomp::SeccompState;
 use crate::spinlock::{SpinLock, SpinLockGuard};
 use crate::swtch::swtch;
 use crate::sync::OnceLock;
@@ -357,6 +360,8 @@ pub struct ProcInner {
     pub pid: Pid,
     /// Thread group ID (same as pid for group leader, same as leader's pid for threads)
     pub tgid: Pid,
+    /// Namespace-local PID (ns_pid from the process's PID namespace)
+    pub ns_pid: Pid,
 }
 
 impl ProcInner {
@@ -368,6 +373,7 @@ impl ProcInner {
             xstate: 0,
             pid: Pid(0),
             tgid: Pid(0),
+            ns_pid: Pid(0),
         }
     }
 }
@@ -422,6 +428,13 @@ pub struct ProcData {
     pub env: Vec<String>,
     /// Next mmap address (grows downward from MMAP_BASE)
     pub mmap_next: VA,
+    /// Namespace proxy (all 7 namespace types for this process)
+    /// Initialized to None; set to `Some(root)` in `alloc()` before use.
+    pub ns: Option<namespace::NsProxy>,
+    /// Capability sets
+    pub caps: SpinLock<CapabilityState>,
+    /// Seccomp state
+    pub seccomp: SeccompState,
 }
 
 impl ProcData {
@@ -451,6 +464,9 @@ impl ProcData {
             sigactions: None,
             env: Vec::new(),
             mmap_next: VA::new(crate::param::MMAP_BASE),
+            ns: None,
+            caps: SpinLock::new(CapabilityState::new(), "caps"),
+            seccomp: SeccompState::Disabled,
         }
     }
 
@@ -724,6 +740,7 @@ impl ProcTable {
                     [signal::SigAction::default(); signal::SIGNAL_MAX],
                     "sigactions",
                 )));
+                data.ns = Some(crate::namespace::root_ns().clone());
 
                 return Ok((proc, inner));
             }
@@ -773,6 +790,9 @@ pub fn user_init() {
 
     // init's pgrp = init's pid (init is its own process group leader)
     data.pgrp = inner.pid;
+
+    // init gets root namespace PID
+    inner.ns_pid = data.ns.as_ref().unwrap().pid.alloc_ns_pid();
 
     inner.state = ProcState::Runnable;
 
@@ -923,8 +943,12 @@ pub fn fork() -> Result<Pid, KernelError> {
     // child gets its own mmap region (not inherited)
     new_data.mmap_next = VA::new(crate::param::MMAP_BASE);
 
+    // inherit parent's namespaces (share by default)
+    new_data.ns = data.ns.clone();
+
     let pid = new_inner.pid;
     new_inner.tgid = pid; // fork creates a new thread group leader
+    new_inner.ns_pid = data.ns.as_ref().unwrap().pid.alloc_ns_pid();
 
     // drop new proc's lock here
     drop(new_inner);
@@ -1036,7 +1060,11 @@ pub fn clone_proc(flags: usize, stack: usize, tls: usize) -> Result<Pid, KernelE
         new_inner.tgid = new_inner.pid;
     }
 
+    // inherit parent's namespaces (share by default)
+    new_data.ns = data.ns.clone();
+
     let pid = new_inner.pid;
+    new_inner.ns_pid = data.ns.as_ref().unwrap().pid.alloc_ns_pid();
 
     // drop new proc's lock here
     drop(new_inner);

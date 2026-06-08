@@ -1489,3 +1489,67 @@ pub fn sys_signalfd4(args: &SyscallArgs) -> Result<usize, SysError> {
 
     Ok(fd)
 }
+
+pub fn sys_setns(_args: &SyscallArgs) -> Result<usize, SysError> {
+    // TODO: implement setns via /proc/<pid>/ns/<type> file descriptors
+    Err(SysError::NotImplemented)
+}
+
+pub fn sys_unshare(args: &SyscallArgs) -> Result<usize, SysError> {
+    let flags = args.get_int(0);
+    let (_, data) = current_proc_and_data_mut();
+    let parent_ns = data.ns.as_ref().unwrap();
+    data.ns = Some(crate::namespace::NsProxy::from_parent(parent_ns, flags as usize));
+    Ok(0)
+}
+
+pub fn sys_sethostname(args: &SyscallArgs) -> Result<usize, SysError> {
+    let hostname_addr = args.get_addr(0);
+    let len = args.get_int(1) as usize;
+    let (proc, _data) = current_proc_and_data_mut();
+    // copy hostname from user space
+    let mut buf = alloc::vec![0u8; len];
+    let src = hostname_addr;
+    let dst = &mut buf;
+    try_log!(proc::copy_from_user(src, dst).map_err(|_| SysError::BadAddress));
+    let (_, data) = current_proc_and_data_mut();
+    let ns = data.ns.as_ref().unwrap();
+    let mut uts_data = ns.uts.data.lock();
+    uts_data.set_hostname(dst).map_err(|_| SysError::InvalidArgument)?;
+    Ok(0)
+}
+
+pub fn sys_gethostname(args: &SyscallArgs) -> Result<usize, SysError> {
+    let buf_addr = args.get_addr(0);
+    let len = args.get_int(1) as usize;
+    let (_, data) = current_proc_and_data_mut();
+    let ns = data.ns.as_ref().unwrap();
+    let uts_data = ns.uts.data.lock();
+    let hostname = uts_data.hostname();
+    if hostname.len() > len {
+        return Err(SysError::InvalidArgument);
+    }
+    let src = hostname;
+    let dst = buf_addr;
+    try_log!(proc::copy_to_user(src, dst).map_err(|_| SysError::BadAddress));
+    Ok(hostname.len())
+}
+
+pub fn sys_capget(args: &SyscallArgs) -> Result<usize, SysError> {
+    let hdr_addr = args.get_addr(0);
+    let data_addr = args.get_addr(1);
+    crate::capability::sys_capget(hdr_addr, data_addr)
+}
+
+pub fn sys_capset(args: &SyscallArgs) -> Result<usize, SysError> {
+    let hdr_addr = args.get_addr(0);
+    let data_addr = args.get_addr(1);
+    crate::capability::sys_capset(hdr_addr, data_addr)
+}
+
+pub fn sys_seccomp(args: &SyscallArgs) -> Result<usize, SysError> {
+    let op = args.get_int(0) as usize;
+    let flags = args.get_int(1) as usize;
+    let args_addr = args.get_addr(2);
+    crate::seccomp::sys_seccomp(op, flags, args_addr)
+}
