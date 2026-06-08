@@ -25,6 +25,7 @@ const ALL_TESTS: &[&str] = &[
     "/_cgroup",
     "/_capability",
     "/_seccomp",
+    "/_overlay",
 ];
 
 static mut FILTER_BUF: [u8; 256] = [0; 256];

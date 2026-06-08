@@ -5,20 +5,20 @@ cd "$DIR"
 
 echo ""
 echo "=== Core Kernel Tests ==="
-echo "  _fs _pipe _proc _fd _sbrk _cow _syscall _thread _thread_v3 _eventfd _memfd_create _pidfd _splice _getrandom _close_range _inotify _signalfd _timerfd _ns_pid _ns_uts _setns _cgroup _capability _seccomp"
+echo "  _fs _pipe _proc _fd _sbrk _cow _syscall _thread _thread_v3 _eventfd _memfd_create _pidfd _splice _getrandom _close_range _inotify _signalfd _timerfd _ns_pid _ns_uts _setns _cgroup _capability _seccomp _overlay"
 echo ""
 
 # Build only the user package (fast, no posix/net cross-compile needed)
 cargo build --release --package user
 
 touch /tmp/testmode
-echo "fs,pipe,proc,fd,sbrk,cow,syscall,thread,thread_v3,eventfd,memfd_create,pidfd,splice,getrandom,close_range,inotify,signalfd,timerfd,ns_pid,ns_uts,setns,cgroup,capability,seccomp" > /tmp/test_args
+echo "fs,pipe,proc,fd,sbrk,cow,syscall,thread,thread_v3,eventfd,memfd_create,pidfd,splice,getrandom,close_range,inotify,signalfd,timerfd,ns_pid,ns_uts,setns,cgroup,capability,seccomp,overlay" > /tmp/test_args
 
 # Kernel needs /init as PID 1
 required="target/riscv64gc-unknown-none-elf/release/init"
 
 test_bins="$required target/riscv64gc-unknown-none-elf/release/_testrunner"
-for name in fs pipe proc fd sbrk cow syscall thread thread_v3 eventfd memfd_create pidfd splice getrandom close_range inotify signalfd timerfd ns_pid ns_uts setns cgroup capability seccomp; do
+for name in fs pipe proc fd sbrk cow syscall thread thread_v3 eventfd memfd_create pidfd splice getrandom close_range inotify signalfd timerfd ns_pid ns_uts setns cgroup capability seccomp overlay; do
   bin="target/riscv64gc-unknown-none-elf/release/_$name"
   [ -f "$bin" ] && test_bins="$test_bins $bin"
 done

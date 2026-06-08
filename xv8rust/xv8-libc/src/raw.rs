@@ -85,6 +85,8 @@ pub enum Syscall {
     CapGet = 142,
     CapSet = 143,
     Seccomp = 144,
+    OverlayMount = 148,
+    OverlayUmount = 149,
 }
 
 #[inline(always)]
@@ -565,4 +567,12 @@ pub fn capset(hdr: *const usize, data: *const usize) -> isize {
 
 pub fn seccomp(op: usize, flags: usize, args: *const u8) -> isize {
     syscall3(Syscall::Seccomp, op, flags, args as usize)
+}
+
+pub fn overlay_mount(mount_point: *const u8, upper: *const u8, lower: *const u8) -> isize {
+    syscall3(Syscall::OverlayMount, mount_point as usize, upper as usize, lower as usize)
+}
+
+pub fn overlay_umount(mount_point: *const u8) -> isize {
+    syscall1(Syscall::OverlayUmount, mount_point as usize)
 }

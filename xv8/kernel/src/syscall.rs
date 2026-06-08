@@ -407,6 +407,8 @@ pub enum Syscall {
     Seccomp = 144,
     Sethostname = 146,
     Gethostname = 147,
+    OverlayMount = 148,
+    OverlayUmount = 149,
 }
 
 impl TryFrom<usize> for Syscall {
@@ -558,7 +560,9 @@ impl TryFrom<usize> for Syscall {
              143 => Ok(Syscall::CapSet),
              144 => Ok(Syscall::Seccomp),
              146 => Ok(Syscall::Sethostname),
-             147 => Ok(Syscall::Gethostname),
+              147 => Ok(Syscall::Gethostname),
+              148 => Ok(Syscall::OverlayMount),
+              149 => Ok(Syscall::OverlayUmount),
             _ => Err(SysError::NotImplemented),
         }
     }
@@ -729,6 +733,8 @@ pub unsafe fn syscall(trapframe: &mut TrapFrame) {
             Syscall::CapGet => sys_capget(&args),
             Syscall::CapSet => sys_capset(&args),
             Syscall::Seccomp => sys_seccomp(&args),
+            Syscall::OverlayMount => sys_overlay_mount(&args),
+            Syscall::OverlayUmount => sys_overlay_umount(&args),
         },
         Err(e) => Err(e),
     };

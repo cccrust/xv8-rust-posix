@@ -1553,3 +1553,15 @@ pub fn sys_seccomp(args: &SyscallArgs) -> Result<usize, SysError> {
     let args_addr = args.get_addr(2);
     crate::seccomp::sys_seccomp(op, flags, args_addr)
 }
+
+pub fn sys_overlay_mount(args: &SyscallArgs) -> Result<usize, SysError> {
+    let mp = args.fetch_string(args.get_addr(0), 256)?;
+    let up = args.fetch_string(args.get_addr(1), 256)?;
+    let lo = args.fetch_string(args.get_addr(2), 256)?;
+    crate::overlay::sys_mount(&mp, &up, &lo)
+}
+
+pub fn sys_overlay_umount(args: &SyscallArgs) -> Result<usize, SysError> {
+    let mp = args.fetch_string(args.get_addr(0), 256)?;
+    crate::overlay::sys_umount(&mp)
+}

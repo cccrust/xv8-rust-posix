@@ -10,6 +10,7 @@ pub(crate) mod printf;
 pub(crate) mod error;
 pub(crate) mod buf;
 pub(crate) mod capability;
+pub(crate) mod overlay;
 pub(crate) mod cgroup;
 pub(crate) mod console;
 pub(crate) mod e1000;
@@ -78,6 +79,7 @@ pub fn main() -> ! {
             proc::init();
             namespace::init_root();
             cgroup::init();
+            overlay::init();
             trap::init();
             trap::init_hart();
             plic::init();

@@ -1031,6 +1031,15 @@ impl<'a> Path<'a> {
             // get the next inode
             match log!(Directory::lookup(&inode, &mut inner, component)) {
                 Ok(Some((_, next))) => {
+                    // Check if we entered an overlay mount point
+                    if let Some((up_inum, lo_inum)) = crate::overlay::find_overlay(next.inum) {
+                        inode.unlock_put(inner);
+                        next.put();
+                        let remaining = rest.as_str();
+                        return crate::overlay::resolve_overlay_str(
+                            up_inum, lo_inum, remaining, parent,
+                        );
+                    }
                     inode.unlock_put(inner);
                     inode = next;
                 }

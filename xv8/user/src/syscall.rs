@@ -554,6 +554,14 @@ pub mod raw {
     pub fn seccomp(op: usize, flags: usize, args: *const u8) -> isize {
         syscall3(Syscall::Seccomp, op, flags, args as usize)
     }
+
+    pub fn overlay_mount(mount_point: *const u8, upper: *const u8, lower: *const u8) -> isize {
+        syscall3(Syscall::OverlayMount, mount_point as usize, upper as usize, lower as usize)
+    }
+
+    pub fn overlay_umount(mount_point: *const u8) -> isize {
+        syscall1(Syscall::OverlayUmount, mount_point as usize)
+    }
 }
 
 use kernel::abi::{MAXPATH, Stat, SysError};
@@ -1147,6 +1155,32 @@ pub fn seccomp_filter(filter: &[u8]) -> Result<(), SysError> {
     buf[0..2].copy_from_slice(&(filter.len() as u16).to_ne_bytes());
     buf[8..16].copy_from_slice(&ptr.to_ne_bytes());
     check_unit(raw::seccomp(2, 0, buf.as_ptr()))
+}
+
+pub fn overlay_mount(mount_point: &str, upper: &str, lower: &str) -> Result<(), SysError> {
+    // Null-terminate for kernel fetch_string (Rust &str may lack \0 in .rodata)
+    fn null_terminate(s: &str, buf: &mut [u8; 256]) -> *const u8 {
+        let len = s.len().min(255);
+        buf[..len].copy_from_slice(s.as_bytes());
+        buf[len] = 0;
+        buf.as_ptr()
+    }
+    let mut mp_buf = [0u8; 256];
+    let mut up_buf = [0u8; 256];
+    let mut lo_buf = [0u8; 256];
+    check_unit(raw::overlay_mount(
+        null_terminate(mount_point, &mut mp_buf),
+        null_terminate(upper, &mut up_buf),
+        null_terminate(lower, &mut lo_buf),
+    ))
+}
+
+pub fn overlay_umount(mount_point: &str) -> Result<(), SysError> {
+    let mut buf = [0u8; 256];
+    let len = mount_point.len().min(255);
+    buf[..len].copy_from_slice(mount_point.as_bytes());
+    buf[len] = 0;
+    check_unit(raw::overlay_umount(buf.as_ptr()))
 }
 
 pub fn seccomp_kill() -> Result<(), SysError> {
