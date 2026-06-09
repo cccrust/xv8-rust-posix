@@ -5,6 +5,7 @@ use alloc::sync::Arc;
 use crate::console::Console;
 use crate::fs::{BSIZE, FsError, Inode, Stat};
 use crate::log::Operation;
+use crate::namespace::{NsProxy, NsType};
 use crate::net::ping::PingTable;
 use crate::net::tcp::TcpTable;
 use crate::net::udp::SocketTable;
@@ -33,6 +34,7 @@ pub enum FileType {
     Inotify { inotify_id: usize },
     Signalfd { signalfd_id: usize },
     TimerFd { timerfd_id: usize },
+    NsFd { ns_proxy: Arc<NsProxy>, nstype: NsType },
 }
 
 /// File metadata protected by table-wide spinlock
@@ -180,9 +182,10 @@ match inner_copy.r#type {
             FileType::Signalfd { signalfd_id } => {
                 crate::signalfd::free_signalfd_id(signalfd_id);
             }
-            FileType::TimerFd { timerfd_id } => {
+             FileType::TimerFd { timerfd_id } => {
                 crate::timerfd::free_timerfd_id(timerfd_id);
             }
+             FileType::NsFd { .. } => {}
          }
     }
 
@@ -346,6 +349,7 @@ match inner_copy.r#type {
                     Err(val.unwrap_err())
                 }
             }
+            FileType::NsFd { .. } => err!(SysError::BadDescriptor),
         }
     }
 
@@ -462,6 +466,7 @@ match inner_copy.r#type {
             FileType::TimerFd { .. } => {
                 err!(SysError::BadDescriptor);
             }
+            FileType::NsFd { .. } => err!(SysError::BadDescriptor),
         }
     }
 
@@ -505,7 +510,7 @@ match inner_copy.r#type {
 
          match &file_inner.r#type {
              FileType::None => err!(SysError::BadDescriptor),
-               FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } | FileType::Epoll { .. } | FileType::EventFd { .. } | FileType::PidFd { .. } | FileType::Inotify { .. } | FileType::Signalfd { .. } | FileType::TimerFd { .. } => err!(SysError::IsDirectory),
+                FileType::Pipe { .. } | FileType::Socket { .. } | FileType::Ping { .. } | FileType::TcpSocket { .. } | FileType::Epoll { .. } | FileType::EventFd { .. } | FileType::PidFd { .. } | FileType::Inotify { .. } | FileType::Signalfd { .. } | FileType::TimerFd { .. } | FileType::NsFd { .. } => err!(SysError::IsDirectory),
              FileType::Inode { .. } | FileType::Device { .. } | FileType::MemFd { .. } => {
                 let new_offset = match whence {
                     0 => { // SEEK_SET

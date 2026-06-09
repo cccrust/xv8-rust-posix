@@ -136,6 +136,7 @@ fn fd_readiness(fd: usize) -> (bool, bool) {
             crate::timerfd::timerfd_readiness(*timerfd_id)
         }
         FileType::None => (false, false),
+        FileType::NsFd { .. } => (false, false),
     }
 }
 

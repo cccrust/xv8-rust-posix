@@ -3,7 +3,7 @@
 
 use user::*;
 
-const STATE_DIR: &str = "/var/lib/xv8-container/containers";
+const STATE_DIR: &str = "/var/lib/dock8/containers";
 
 fn fatal(msg: &str) -> ! {
     exit_with_msg(msg)
@@ -11,7 +11,7 @@ fn fatal(msg: &str) -> ! {
 
 fn container_state_dir(name: &str) -> [u8; 256] {
     let mut buf = [0u8; 256];
-    let prefix = b"/var/lib/xv8-container/containers/";
+    let prefix = b"/var/lib/dock8/containers/";
     buf[..prefix.len()].copy_from_slice(prefix);
     let name_bytes = name.as_bytes();
     let start = prefix.len();
@@ -21,9 +21,10 @@ fn container_state_dir(name: &str) -> [u8; 256] {
 }
 
 fn write_state(pid: u32, name: &str, cmd: &str) {
+    let _ = mkdir("/var");
     let _ = mkdir("/var/lib");
-    let _ = mkdir("/var/lib/xv8-container");
-    let _ = mkdir("/var/lib/xv8-container/containers");
+    let _ = mkdir("/var/lib/dock8");
+    let _ = mkdir("/var/lib/dock8/containers");
     let dir = container_state_dir(name);
     let _ = mkdir(cstr_as_str(&dir));
 
@@ -50,7 +51,7 @@ fn cstr_as_str(buf: &[u8]) -> &str {
 
 fn cmd_run(args: &[&str]) {
     if args.len() < 2 {
-        println!("usage: xv8-container run <name> <command> [args...]");
+        println!("usage: dock8 run <name> <command> [args...]");
         exit(1);
     }
     let name = args[0];
@@ -118,18 +119,77 @@ fn cmd_ps() {
 
 fn cmd_exec(args: &[&str]) {
     if args.len() < 2 {
-        println!("usage: xv8-container exec <name> <command> [args...]");
+        println!("usage: dock8 exec <name> <command> [args...]");
         exit(1);
     }
-    let _name = args[0];
-    let _cmd = args[1];
-    let _args = &args[1..];
-    println!("exec not yet supported");
+    let name = args[0];
+    let cmd = args[1];
+    let cmd_args = &args[1..];
+
+    let pid_path = {
+        let dir = container_state_dir(name);
+        let mut path = [0u8; 256];
+        let dlen = dir.iter().position(|&b| b == 0).unwrap_or(dir.len());
+        path[..dlen].copy_from_slice(&dir[..dlen]);
+        path[dlen] = b'/';
+        path[dlen + 1..dlen + 5].copy_from_slice(b"pid\0");
+        let _ = path;
+        dir
+    };
+    let _ = pid_path;
+
+    let mut pid_buf = [0u8; 1];
+    let mut pid_path_buf = [0u8; 256];
+    let dir = container_state_dir(name);
+    let dlen = dir.iter().position(|&b| b == 0).unwrap_or(dir.len());
+    pid_path_buf[..dlen].copy_from_slice(&dir[..dlen]);
+    pid_path_buf[dlen] = b'/';
+    pid_path_buf[dlen + 1..dlen + 5].copy_from_slice(b"pid\0");
+    let pid_str = cstr_as_str(&pid_path_buf);
+    let f = match open(pid_str, OpenFlag::READ_ONLY) {
+        Ok(fd) => fd,
+        Err(_) => {
+            println!("container {} not found", name);
+            exit(1);
+        }
+    };
+    let n = read(f, &mut pid_buf).unwrap_or(0);
+    close(f).unwrap_or(());
+    if n < 1 {
+        println!("container {} has no pid", name);
+        exit(1);
+    }
+    let target_pid = pid_buf[0] as usize;
+
+    match fork() {
+        Ok(0) => {
+            let ns_fd = match nsopen(target_pid, 5) {
+                Ok(fd) => fd,
+                Err(_) => {
+                    println!("nsopen failed");
+                    exit(1);
+                }
+            };
+            let _ = setns(ns_fd, 0);
+            let _ = exec(cmd, cmd_args);
+            println!("exec failed");
+            exit(1);
+        }
+        Ok(pid) => {
+            let mut code = 0;
+            let _ = wait(&mut code);
+            println!("exec in {} exited with code {}", name, code);
+        }
+        Err(_) => {
+            println!("fork failed");
+            exit(1);
+        }
+    }
 }
 
 fn cmd_rm(args: &[&str]) {
     if args.is_empty() {
-        println!("usage: xv8-container rm <name>");
+        println!("usage: dock8 rm <name>");
         exit(1);
     }
     let _name = args[0];
@@ -145,7 +205,7 @@ fn main(args: Args) {
     let cmd = match args.get_str(1) {
         Some(c) => c,
         None => {
-            println!("usage: xv8-container <command> [args...]");
+            println!("usage: dock8 <command> [args...]");
             println!("commands: run, exec, ps, rm, pull");
             exit(1);
         }

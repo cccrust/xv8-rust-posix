@@ -20,13 +20,11 @@ fn uint_to_str(mut n: usize, buf: &mut [u8]) -> usize {
 fn main(_args: Args) {
     println!("container test: stage 1 - setup");
 
-    // Create container root filesystem at root level (no /tmp)
     let _ = mkdir("/mycontainer");
     let _ = mkdir("/mycontainer/oldroot");
     let _ = mkdir("/mycontainer/dev");
     let _ = mknod("/mycontainer/dev/console", 1, 3);
 
-    // Setup cgroup
     let cg = match open("cgroup", OpenFlag::READ_WRITE) {
         Ok(fd) => fd,
         Err(_) => exit_with_msg("open /cgroup failed"),
@@ -40,15 +38,12 @@ fn main(_args: Args) {
 
     match fork() {
         Ok(0) => {
-            // Child: create new namespaces
             if unshare(CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWUTS).is_err() {
                 exit_with_msg("unshare failed");
             }
 
-            // Set hostname
             let _ = sethostname(b"testcontainer");
 
-            // Attach to cgroup
             let pid = getpid();
             let mut num = [0u8; 16];
             let plen = uint_to_str(pid, &mut num);
@@ -65,7 +60,6 @@ fn main(_args: Args) {
             }
             let _ = close(cg);
 
-            // pivot_root to new root
             match pivot_root("/mycontainer", "/mycontainer/oldroot") {
                 Ok(()) => {}
                 Err(e) => {
@@ -75,7 +69,6 @@ fn main(_args: Args) {
             }
             let _ = chdir("/");
 
-            // Verify isolation: original /mycontainer should NOT be accessible
             match open("/mycontainer", OpenFlag::READ_ONLY) {
                 Ok(fd) => {
                     close(fd).unwrap();
@@ -85,7 +78,6 @@ fn main(_args: Args) {
                 Err(_) => {}
             }
 
-            // Verify /oldroot IS accessible (original root)
             match open("/oldroot", OpenFlag::READ_ONLY) {
                 Ok(fd) => {
                     close(fd).unwrap();
@@ -96,7 +88,6 @@ fn main(_args: Args) {
                 }
             }
 
-            // Verify /dev/console exists
             match open("/dev/console", OpenFlag::READ_ONLY) {
                 Ok(fd) => {
                     close(fd).unwrap();
@@ -125,7 +116,6 @@ fn main(_args: Args) {
                 exit(1);
             }
 
-            // Verify cgroup stats still show our container
             let cg2 = match open("cgroup", OpenFlag::READ_WRITE) {
                 Ok(fd) => fd,
                 Err(_) => exit_with_msg("open /cgroup failed"),

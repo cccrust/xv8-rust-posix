@@ -543,6 +543,10 @@ pub mod raw {
         syscall2(Syscall::Gethostname, buf as usize, len)
     }
 
+    pub fn nsopen(pid: usize, nstype: u32) -> isize {
+        syscall2(Syscall::NsOpen, pid, nstype as usize)
+    }
+
     pub fn capget(hdr: *const usize, data: *mut usize) -> isize {
         syscall2(Syscall::CapGet, hdr as usize, data as usize)
     }
@@ -1122,6 +1126,10 @@ pub fn timerfd_gettime(fd: Fd, curr_val: usize) -> Result<(), SysError> {
 
 pub fn setns(fd: Fd, nstype: u32) -> Result<(), SysError> {
     check_unit(raw::setns(fd.as_raw(), nstype))
+}
+
+pub fn nsopen(pid: usize, nstype: u32) -> Result<Fd, SysError> {
+    check(raw::nsopen(pid, nstype)).map(|fd| Fd(fd as _))
 }
 
 pub fn unshare(flags: usize) -> Result<(), SysError> {

@@ -1,8 +1,32 @@
+use core::fmt;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::spinlock::SpinLock;
 use crate::sync::OnceLock;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NsType {
+    Mount = 0,
+    Cgroup = 1,
+    Uts = 2,
+    Ipc = 3,
+    User = 4,
+    Pid = 5,
+    Net = 6,
+}
+
+pub fn nstype_to_flag(t: NsType) -> usize {
+    match t {
+        NsType::Mount => CLONE_NEWNS,
+        NsType::Cgroup => CLONE_NEWCGROUP,
+        NsType::Uts => CLONE_NEWUTS,
+        NsType::Ipc => CLONE_NEWIPC,
+        NsType::User => CLONE_NEWUSER,
+        NsType::Pid => CLONE_NEWPID,
+        NsType::Net => CLONE_NEWNET,
+    }
+}
 
 // ── CLONE_NEW* flag constants ──────────────────────────────────────────────
 
@@ -64,6 +88,12 @@ pub struct UtsNamespace {
     pub data: SpinLock<UtsData>,
 }
 
+impl fmt::Debug for UtsNamespace {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("UtsNamespace").field("id", &self.id).finish()
+    }
+}
+
 impl UtsNamespace {
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
@@ -86,6 +116,7 @@ impl UtsNamespace {
 
 // ── PID namespace ──────────────────────────────────────────────────────────
 
+#[derive(Debug)]
 pub struct PidNamespace {
     pub id: NamespaceId,
     next_ns_pid: AtomicUsize,
@@ -108,6 +139,7 @@ impl PidNamespace {
 
 // ── Placeholder namespace types ────────────────────────────────────────────
 
+#[derive(Debug)]
 pub struct MountNamespace {
     pub id: NamespaceId,
 }
@@ -118,6 +150,7 @@ impl MountNamespace {
     }
 }
 
+#[derive(Debug)]
 pub struct NetNamespace {
     pub id: NamespaceId,
 }
@@ -128,6 +161,7 @@ impl NetNamespace {
     }
 }
 
+#[derive(Debug)]
 pub struct IpcNamespace {
     pub id: NamespaceId,
 }
@@ -138,6 +172,7 @@ impl IpcNamespace {
     }
 }
 
+#[derive(Debug)]
 pub struct UserNamespace {
     pub id: NamespaceId,
 }
@@ -148,6 +183,7 @@ impl UserNamespace {
     }
 }
 
+#[derive(Debug)]
 pub struct CgroupNamespace {
     pub id: NamespaceId,
 }
@@ -160,6 +196,7 @@ impl CgroupNamespace {
 
 // ── NsProxy: one per process (stores Arc to each namespace type) ───────────
 
+#[derive(Debug)]
 pub struct NsProxy {
     pub pid: Arc<PidNamespace>,
     pub uts: Arc<UtsNamespace>,
@@ -201,6 +238,21 @@ impl NsProxy {
             user: UserNamespace::new(),
             cgroup: CgroupNamespace::new(),
         }
+    }
+
+    /// Returns a new NsProxy with one namespace type replaced by the given source's.
+    pub fn clone_with_override(&self, nstype: NsType, source: &Self) -> Self {
+        let mut ns = self.clone();
+        match nstype {
+            NsType::Pid => ns.pid = source.pid.clone(),
+            NsType::Uts => ns.uts = source.uts.clone(),
+            NsType::Mount => ns.mount = source.mount.clone(),
+            NsType::Net => ns.net = source.net.clone(),
+            NsType::Ipc => ns.ipc = source.ipc.clone(),
+            NsType::User => ns.user = source.user.clone(),
+            NsType::Cgroup => ns.cgroup = source.cgroup.clone(),
+        }
+        ns
     }
 
     pub fn from_parent(parent: &NsProxy, flags: usize) -> Self {

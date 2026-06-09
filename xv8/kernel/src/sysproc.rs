@@ -1491,9 +1491,56 @@ pub fn sys_signalfd4(args: &SyscallArgs) -> Result<usize, SysError> {
     Ok(fd)
 }
 
-pub fn sys_setns(_args: &SyscallArgs) -> Result<usize, SysError> {
-    // TODO: implement setns via /proc/<pid>/ns/<type> file descriptors
-    Err(SysError::NotImplemented)
+pub fn sys_setns(args: &SyscallArgs) -> Result<usize, SysError> {
+    let _nstype = args.get_int(1) as u32;
+    let (_fd_num, file) = try_log!(args.get_file(0));
+    let inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    match &inner.r#type {
+        crate::file::FileType::NsFd { ns_proxy, nstype } => {
+            let (_, data) = current_proc_and_data_mut();
+            let current = data.ns.as_ref().unwrap();
+            let new_ns = current.clone_with_override(*nstype, ns_proxy);
+            data.ns = Some(new_ns);
+            Ok(0)
+        }
+        _ => Err(SysError::BadDescriptor),
+    }
+}
+
+pub fn sys_nsopen(args: &SyscallArgs) -> Result<usize, SysError> {
+    let pid = args.get_int(0) as usize;
+    let nstype_val = args.get_int(1) as u32;
+    if !crate::proc::is_valid_pid(pid) {
+        return Err(SysError::NoEntry);
+    }
+    let nstype = match nstype_val {
+        0 => crate::namespace::NsType::Mount,
+        1 => crate::namespace::NsType::Cgroup,
+        2 => crate::namespace::NsType::Uts,
+        3 => crate::namespace::NsType::Ipc,
+        4 => crate::namespace::NsType::User,
+        5 => crate::namespace::NsType::Pid,
+        6 => crate::namespace::NsType::Net,
+        _ => return Err(SysError::InvalidArgument),
+    };
+    let ns_proxy = {
+        let mut found: Option<alloc::sync::Arc<crate::namespace::NsProxy>> = None;
+        for p in crate::proc::PROC_TABLE.iter() {
+            if *p.inner.lock().pid == pid {
+                let data = p.data();
+                found = data.ns.clone().map(alloc::sync::Arc::new);
+                break;
+            }
+        }
+        found.ok_or(SysError::NoEntry)?
+    };
+    let file = try_log!(crate::file::File::alloc());
+    let fd = try_log!(crate::sysfile::fd_alloc(file.clone()));
+    let mut inner = crate::file::FILE_TABLE.inner[file.id].lock();
+    inner.r#type = crate::file::FileType::NsFd { ns_proxy, nstype };
+    inner.readable = true;
+    inner.writeable = false;
+    Ok(fd)
 }
 
 pub fn sys_unshare(args: &SyscallArgs) -> Result<usize, SysError> {

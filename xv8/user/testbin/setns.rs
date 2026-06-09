@@ -5,18 +5,21 @@ use user::*;
 
 #[unsafe(no_mangle)]
 fn main(_args: Args) {
-    match raw::setns(0, 0) {
-        ret if ret < 0 => {
-            let err = SysError::from_code((-ret) as u16);
-            if err == SysError::NotImplemented {
-                println!("setns stub test passed");
-            } else {
-                println!("FAIL: setns returned unexpected error {:?}", err);
-                exit(1);
-            }
+    let pid = raw::getpid() as usize;
+    let ns_fd = match raw::nsopen(pid, 5) {
+        ret if ret >= 0 => ret,
+        ret => {
+            println!("FAIL: nsopen returned error {:?}", SysError::from_code((-ret) as u16));
+            exit(1);
         }
-        _ => {
-            println!("FAIL: setns succeeded unexpectedly");
+    };
+    match raw::setns(ns_fd as _, CLONE_NEWPID as u32) {
+        ret if ret >= 0 => {
+            println!("setns test passed");
+        }
+        ret => {
+            let err = SysError::from_code((-ret) as u16);
+            println!("FAIL: setns returned unexpected error {:?}", err);
             exit(1);
         }
     }
