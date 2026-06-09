@@ -84,6 +84,15 @@ xv8 QEMU flow (`xv8/test.sh`):
 | `xv8-http` | `xv8rust/xv8-http/` | HTTP/1.1 types + parser (`#![no_std]`) |
 | `xv8-router` | `xv8rust/xv8-router/` | Lightweight axum-like Router (`#![no_std]`) |
 
+## Documentation
+
+- `_doc/` — planning docs (v5.x changelogs)
+- `_wiki/` — technical wiki (OS concepts, containers, POSIX, network)
+- `README.md` per sub-project (posix/, xv8rust/, net/)
+- `AGENTS.md` per sub-project
+- `xv8/kernel/src/*.md` — inline kernel module docs (file, fs, proc, namespace, cgroup, overlay, seccomp, capability, eventfd, memfd, pidfd, signalfd, timerfd, inotify, poll, etc.)
+- `posix/tools/src/bin/*.md` — inline tool docs
+
 ## Planning Docs
 
 - `_doc/todo.md` — master development plan

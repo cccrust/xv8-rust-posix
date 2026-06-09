@@ -341,8 +341,45 @@ pub fn sys_tcp_connect(args: &SyscallArgs) -> Result<(), SysError> {
 }
 ```
 
+## 容器相關系統呼叫
+
+xv8 從 v5.0 開始支援容器隔離，新增一系列系統呼叫（編號 140-150）：
+
+```rust
+pub fn sys_unshare(args: &SyscallArgs) -> Result<usize, SysError> {
+    let flags = args.get_raw(0);
+    proc::unshare(flags)
+}
+
+pub fn sys_setns(args: &SyscallArgs) -> Result<usize, SysError> {
+    // 從 fd 讀取 NsFd 的 NsProxy，取代當前 process 指定 namespace
+    // 使用 clone_with_override 避免影響其他 namespace
+}
+
+pub fn sys_nsopen(args: &SyscallArgs) -> Result<usize, SysError> {
+    let pid = args.get_raw(0);
+    let nstype = args.get_raw(1);
+    // 從目標 process 取得 NsProxy
+    // 建立 FileType::NsFd fd
+}
+
+pub fn sys_pivot_root(args: &SyscallArgs) -> Result<usize, SysError> {
+    let new_root = args.fetch_string(args.get_addr(0), 256)?;
+    let put_old = args.fetch_string(args.get_addr(1), 256)?;
+    // 切換當前 process 的 root inode
+    // 將舊 root 掛載到 put_old
+}
+```
+
+這些系統呼叫透過 `data.root`（process 專屬 root inode）與 `data.ns`（NsProxy）實現隔離。
+
 ## 相關主題
 
+- [namespace](namespace.md)：Namespace 模組
+- [cgroup](cgroup.md)：資源控制
+- [seccomp](seccomp.md)：安全計算
+- [capability](capability.md)：能力管理
+- [overlay](overlay.md)：疊合檔案系統
 - [[Process]]：程序管理
 - [[Trap]]：陷阱處理
 - [[file]]：檔案抽象
